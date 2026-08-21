@@ -1,0 +1,2 @@
+import {describe,it,expect} from 'vitest';import {evaluate,evalGraph,rows} from './logic.js';
+describe('logic',()=>{it('evaluates every core family',()=>{expect(evaluate('AND',[1,1])).toBe(1);expect(evaluate('NOT',[1])).toBe(0);expect(evaluate('XNOR',[1,1])).toBe(1)});it('evaluates DAGs',()=>{expect(evalGraph({A:1,B:0},[{id:'x',type:'OR',sources:['A','B']}]).x).toBe(1)});it('generates all combinations',()=>expect(rows(['A','B','C'],()=>0)).toHaveLength(8))});

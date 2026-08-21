@@ -1,0 +1,2 @@
+const BASE=import.meta.env.VITE_API_URL||'http://localhost:8000/api';
+export async function api(path,options={}){const token=localStorage.getItem('dg_token');const response=await fetch(BASE+path,{...options,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{}) ,...options.headers}});if(!response.ok){let body={};try{body=await response.json()}catch{}throw new Error(body.detail||'Request failed')}return response.status===204?null:response.json()}
