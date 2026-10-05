@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     mysql_database: str = "digigates"
     mysql_user: str = "digigates"
     mysql_password: str = Field(default="", repr=False)
+    mysql_ssl_ca: str = ""
     secret_key: str = Field(default="development-only-change-me", repr=False)
     access_token_minutes: int = 1440
     frontend_origin: str = "http://localhost:5173"
@@ -17,6 +18,12 @@ class Settings(BaseSettings):
     @property
     def database_url(self):
         return f"mysql+pymysql://{quote_plus(self.mysql_user)}:{quote_plus(self.mysql_password)}@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}?charset=utf8mb4"
+
+    @property
+    def database_connect_args(self):
+        if not self.mysql_ssl_ca:
+            return {}
+        return {"ssl": {"ca": self.mysql_ssl_ca}}
 
 @lru_cache
 def get_settings(): return Settings()
