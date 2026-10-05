@@ -1,4 +1,6 @@
 from datetime import datetime
+import logging
+import time
 from decimal import Decimal
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,10 +38,25 @@ def register(data:Register,db:Session=Depends(get_db)):
     return Token(access_token=token_for(user),user=user)
 @app.post("/api/auth/login",response_model=Token)
 def login(data:Login,db:Session=Depends(get_db)):
-    user=db.scalar(select(User).where(User.email==str(data.email).lower()))
-    if not user or not verify_password(data.password,user.password_hash): raise HTTPException(401,"Incorrect email or password")
-    if not user.is_active: raise HTTPException(403,"Account is inactive")
-    return Token(access_token=token_for(user),user=user)
+    started=time.perf_counter()
+    try:
+        query_started=time.perf_counter()
+        user=db.scalar(select(User).where(User.email==str(data.email).lower()))
+        logging.info("LOGIN_DIAG database_lookup_seconds=%.3f",time.perf_counter()-query_started)
+        verify_started=time.perf_counter()
+        valid=user is not None and verify_password(data.password,user.password_hash)
+        logging.info("LOGIN_DIAG password_verify_seconds=%.3f",time.perf_counter()-verify_started)
+        if not valid: raise HTTPException(401,"Incorrect email or password")
+        if not user.is_active: raise HTTPException(403,"Account is inactive")
+        token_started=time.perf_counter()
+        result=Token(access_token=token_for(user),user=user)
+        logging.info("LOGIN_DIAG token_seconds=%.3f total_seconds=%.3f",time.perf_counter()-token_started,time.perf_counter()-started)
+        return result
+    except HTTPException:
+        raise
+    except Exception:
+        logging.exception("LOGIN_DIAG unexpected_failure total_seconds=%.3f",time.perf_counter()-started)
+        raise
 @app.get("/api/auth/me",response_model=UserOut)
 def me(user=Depends(current_user)): return user
 
