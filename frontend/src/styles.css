@@ -81,3 +81,41 @@
 .helpSteps article>b{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#113f2c;color:var(--green)}
 .helpSteps h3{color:var(--green);margin:14px 0 6px}
 @media(max-width:700px){.helpSection{margin:0 15px 50px;padding:25px 18px}.helpSteps{grid-template-columns:1fr}}
+
+/* DIGIGATES PROFILE */
+.profileTrigger{display:flex!important;align-items:center;gap:10px!important;padding:6px 10px!important;border:1px solid transparent!important;border-radius:10px!important;text-transform:none!important}
+.profileTrigger:hover,.profileTrigger.active{background:#0b211c!important;border-color:var(--green)!important;transform:none!important}
+.profileTrigger .avatar{flex:0 0 38px}
+.profilePage{width:min(1180px,92vw);margin:0 auto;padding:38px 0 70px}
+.profileHero{display:flex;align-items:center;gap:22px;padding:26px 30px;margin-bottom:22px;background:linear-gradient(135deg,rgba(9,34,47,.96),rgba(7,21,37,.9))}
+.profileAvatar{width:76px;height:76px;flex:0 0 76px;border-radius:50%;display:grid;place-items:center;background:#10382b;border:1px solid var(--green);box-shadow:0 0 25px #56d3481f}
+.profileAvatar svg{width:36px;height:36px;color:var(--green)}
+.profileHero small,.dangerZone small{color:var(--green);font-weight:800;letter-spacing:.09em}
+.profileHero h1{margin:5px 0 3px;font-size:30px}
+.profileHero p{margin:0;color:var(--muted)}
+.profileMeta{display:flex;gap:8px;margin-top:12px}
+.profileMeta span{padding:5px 10px;border:1px solid #29465c;border-radius:999px;background:#091a2a;color:#cfe2f2;font-size:12px;font-weight:700;text-transform:capitalize}
+.profileMeta span:last-child{border-color:#315d37;color:#8ee782;background:#0c281c}
+.profileNotice{padding:13px 16px;margin-bottom:18px;border-radius:9px;border:1px solid}
+.successNotice{color:#8ee782;background:#0b281b;border-color:#315d37}
+.profileNotice.error{background:#30131a;border-color:#6d2933}
+.profileGrid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.profileCard{padding:26px;display:grid;align-content:start;gap:17px}
+.profileCard h2,.dangerZone h2{margin:0}
+.profileCard>p,.dangerZone p,.dangerAction p{margin:0;color:var(--muted);line-height:1.55}
+.profileCard label{display:grid;gap:7px;font-weight:700;color:#dce8f3}
+.profileCard input,.dangerAction input{width:100%;background:#030d1a;border:1px solid #2a4058;border-radius:8px;padding:12px;color:#edf5ff;outline:none}
+.profileCard input:focus,.dangerAction input:focus{border-color:var(--green);box-shadow:0 0 0 3px #56d34814}
+.profileCard button{justify-self:start;min-width:150px}
+.dangerZone{margin-top:22px;padding:26px;border-color:#64303a;background:linear-gradient(135deg,rgba(38,13,20,.65),rgba(7,21,37,.92))}
+.dangerZone>div:first-child{margin-bottom:20px}
+.dangerZone h2{margin-top:5px;color:#ff7c86}
+.dangerAction{display:grid;grid-template-columns:minmax(280px,1fr) minmax(220px,300px) 150px;gap:20px;align-items:center;padding:20px 0;border-top:1px solid #482833}
+.dangerAction h3{margin:0 0 6px}
+.deleteInputs{display:grid;gap:9px}
+.dangerButton{border-color:#a34450;color:#ff8992;background:#251016;font-weight:800}
+.dangerButton:hover:not(:disabled){border-color:#ff6d78;background:#35131b}
+.solidDanger{background:#b53c49;color:white;border-color:#b53c49}
+.solidDanger:hover:not(:disabled){background:#cc4654;border-color:#e15b67}
+@media(max-width:900px){.profileGrid{grid-template-columns:1fr}.dangerAction{grid-template-columns:1fr}.dangerAction>button{justify-self:start}.profilePage{width:min(94vw,720px)}}
+@media(max-width:700px){.profileHero{align-items:flex-start;padding:20px}.profileAvatar{width:58px;height:58px;flex-basis:58px}.profileAvatar svg{width:28px}.profileHero h1{font-size:24px}.profileTrigger{padding:5px!important}.profileTrigger b{display:none}.profilePage{padding-top:22px}.profileCard,.dangerZone{padding:20px}}

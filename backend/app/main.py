@@ -2,13 +2,13 @@ from datetime import datetime
 from decimal import Decimal
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .config import settings
 from .database import get_db
 from .models import Exercise, ExerciseAttempt, Lesson, LogicGate, PrebuiltCircuit, Progress, ProgressStatus, SavedCircuit, User, UserRole
-from .schemas import AttemptCreate, AttemptOut, ExerciseCreate, ExerciseOut, ExerciseUpdate, GateCreate, GateOut, GateUpdate, LessonCreate, LessonOut, LessonUpdate, Login, PrebuiltCreate, PrebuiltOut, PrebuiltUpdate, ProgressOut, ProgressUpsert, Register, SavedCircuitCreate, SavedCircuitOut, SavedCircuitUpdate, Token, UserOut
+from .schemas import AttemptCreate, AttemptOut, ExerciseCreate, ExerciseOut, ExerciseUpdate, GateCreate, GateOut, GateUpdate, LessonCreate, LessonOut, LessonUpdate, Login, PrebuiltCreate, PrebuiltOut, PrebuiltUpdate, ProgressOut, ProgressUpsert, Register, SavedCircuitCreate, SavedCircuitOut, SavedCircuitUpdate, Token, UserOut, AccountConfirmation, AccountDeleteConfirmation, PasswordChange, ProfileUpdate
 from .security import admin_user, current_user, hash_password, token_for, verify_password
 
 app=FastAPI(title="DigiGates API",version="2.0.0")
@@ -42,6 +42,48 @@ def login(data:Login,db:Session=Depends(get_db)):
     return Token(access_token=token_for(user),user=user)
 @app.get("/api/auth/me",response_model=UserOut)
 def me(user=Depends(current_user)): return user
+
+@app.get("/api/profile",response_model=UserOut)
+def profile(user=Depends(current_user)):
+    return user
+
+@app.put("/api/profile",response_model=UserOut)
+def update_profile(data:ProfileUpdate,db:Session=Depends(get_db),user=Depends(current_user)):
+    email=str(data.email).lower()
+    existing=db.scalar(select(User).where(User.email==email,User.user_id!=user.user_id))
+    if existing: raise HTTPException(409,"Email already registered")
+    user.full_name=data.full_name
+    user.email=email
+    commit(db)
+    db.refresh(user)
+    return user
+
+@app.put("/api/profile/password",status_code=204)
+def change_password(data:PasswordChange,db:Session=Depends(get_db),user=Depends(current_user)):
+    if not verify_password(data.current_password,user.password_hash): raise HTTPException(401,"Current password is incorrect")
+    if verify_password(data.new_password,user.password_hash): raise HTTPException(400,"New password must be different from current password")
+    user.password_hash=hash_password(data.new_password)
+    commit(db)
+    return Response(status_code=204)
+
+@app.post("/api/profile/deactivate",status_code=204)
+def deactivate_account(data:AccountConfirmation,db:Session=Depends(get_db),user=Depends(current_user)):
+    if user.role!=UserRole.LEARNER: raise HTTPException(403,"Learner account required")
+    if not verify_password(data.current_password,user.password_hash): raise HTTPException(401,"Current password is incorrect")
+    user.is_active=False
+    commit(db)
+    return Response(status_code=204)
+
+@app.delete("/api/profile",status_code=204)
+def delete_account(data:AccountDeleteConfirmation,db:Session=Depends(get_db),user=Depends(current_user)):
+    if user.role!=UserRole.LEARNER: raise HTTPException(403,"Learner account required")
+    if not verify_password(data.current_password,user.password_hash): raise HTTPException(401,"Current password is incorrect")
+    db.execute(delete(ExerciseAttempt).where(ExerciseAttempt.learner_id==user.user_id))
+    db.execute(delete(Progress).where(Progress.learner_id==user.user_id))
+    db.execute(delete(SavedCircuit).where(SavedCircuit.learner_id==user.user_id))
+    db.delete(user)
+    commit(db)
+    return Response(status_code=204)
 
 ADMIN_RESOURCES={
     "logic-gates":(LogicGate,GateCreate,GateUpdate,GateOut,"gate_id"),

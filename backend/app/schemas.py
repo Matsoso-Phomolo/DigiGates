@@ -18,6 +18,22 @@ class Register(BaseModel):
 class Login(BaseModel): email: EmailStr; password: str
 class UserOut(ORMModel):
     user_id:int; full_name:str; email:EmailStr; role:UserRole; is_active:bool; created_at:datetime; updated_at:datetime
+class ProfileUpdate(BaseModel):
+    full_name: str=Field(min_length=2,max_length=120)
+    email: EmailStr
+    @field_validator("full_name")
+    @classmethod
+    def clean_name(cls,v):
+        if not v.strip(): raise ValueError("name cannot be blank")
+        return v.strip()
+class PasswordChange(BaseModel):
+    current_password: str=Field(min_length=1,max_length=128)
+    new_password: str=Field(min_length=8,max_length=128)
+class AccountConfirmation(BaseModel):
+    current_password: str=Field(min_length=1,max_length=128)
+class AccountDeleteConfirmation(AccountConfirmation):
+    confirmation: Literal["DELETE"]
+
 class Token(BaseModel): access_token:str; token_type:str="bearer"; user:UserOut
 
 GATE_TYPES={"BUFFER":1,"NOT":1,"AND":2,"OR":2,"NAND":2,"NOR":2,"XOR":2,"XNOR":2}
