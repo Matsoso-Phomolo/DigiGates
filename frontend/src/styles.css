@@ -66,3 +66,18 @@
 .junction.high{fill:#36dc73}
 .junction.low{fill:#ec4854}
 .wireGroup{pointer-events:none}
+
+
+/* Public navigation and help */
+.publicNavLink{border:0;background:transparent;color:#e7eef8;padding:12px;border-radius:0}
+.publicNavLink:hover:not(:disabled){color:var(--green);border-color:transparent;transform:none}
+.helpSection{max-width:1400px;margin:0 auto 80px;padding:35px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.helpSection>div:first-child{text-align:center;max-width:800px;margin:0 auto 30px}
+.helpSection small{color:var(--green);font-weight:800;letter-spacing:.08em}
+.helpSection h2{font-size:32px;margin:10px 0}
+.helpSection>div:first-child p,.helpSteps p{color:var(--muted);line-height:1.6}
+.helpSteps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.helpSteps article{padding:24px;background:#061321;border:1px solid var(--line);border-radius:12px}
+.helpSteps article>b{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#113f2c;color:var(--green)}
+.helpSteps h3{color:var(--green);margin:14px 0 6px}
+@media(max-width:700px){.helpSection{margin:0 15px 50px;padding:25px 18px}.helpSteps{grid-template-columns:1fr}}
