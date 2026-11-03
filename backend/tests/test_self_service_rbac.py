@@ -38,3 +38,20 @@ def test_admin_cannot_manage_admin_through_learner_endpoint(mysql_client):
     admin_id,admin_headers=make_user(UserRole.ADMIN,'manager-admin@example.com')
     target_id,_=make_user(UserRole.ADMIN,'target-admin@example.com')
     assert mysql_client.delete(f'/api/admin/learners/{target_id}',headers=admin_headers).status_code==404
+
+def test_password_change_is_available_to_every_authenticated_role_and_pending_admin(mysql_client):
+    cases=[
+        (UserRole.LEARNER,ApprovalStatus.ACTIVE,'password-learner@example.com'),
+        (UserRole.ADMIN,ApprovalStatus.ACTIVE,'password-admin@example.com'),
+        (UserRole.SUPER_ADMIN,ApprovalStatus.ACTIVE,'password-super@example.com'),
+        (UserRole.ADMIN,ApprovalStatus.PENDING,'password-pending@example.com'),
+        (UserRole.ADMIN,ApprovalStatus.REJECTED,'password-rejected@example.com'),
+    ]
+    for role,status,email in cases:
+        with SessionLocal() as db:
+            user=User(full_name='Password Account',email=email,password_hash=hash_password('Secure123!'),role=role,approval_status=status)
+            db.add(user);db.commit();db.refresh(user);headers={"Authorization":"Bearer "+token_for(user)}
+        changed=mysql_client.put('/api/profile/password',headers=headers,json={"current_password":"Secure123!","new_password":"DifferentSecure123!"})
+        assert changed.status_code==204
+        assert mysql_client.post('/api/auth/login',json={"email":email,"password":"Secure123!"}).status_code==401
+        assert mysql_client.post('/api/auth/login',json={"email":email,"password":"DifferentSecure123!"}).status_code==200

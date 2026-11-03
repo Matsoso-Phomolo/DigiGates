@@ -113,3 +113,30 @@ describe('Profile role navigation',()=>{
     expect(container.querySelector('.roleDashboardLink')).toBeNull();
   });
 });
+
+describe('Universal profile password change',()=>{
+  let container;let root;
+  const account=(role,status='ACTIVE')=>({user_id:1,full_name:'Password User',email:'password@example.com',role,approval_status:status,gender:null,date_of_birth:null,is_active:true});
+  const setInput=(input,value)=>act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));await Promise.resolve()});
+  beforeEach(()=>{globalThis.IS_REACT_ACT_ENVIRONMENT=true;localStorage.setItem('dg_token','test-token');container=document.createElement('div');document.body.appendChild(container);root=createRoot(container)});
+  afterEach(()=>{act(()=>root.unmount());container.remove();localStorage.clear();vi.restoreAllMocks()});
+  async function render(user){await act(async()=>{root.render(<MemoryRouter><ProfileV2 user={user} onUserChange={()=>{}} logout={()=>{}}/></MemoryRouter>);await Promise.resolve()})}
+  function passwordForm(){return [...container.querySelectorAll('form')].find(form=>form.textContent.includes('Change Password'))}
+
+  it.each([['LEARNER','ACTIVE'],['ADMIN','ACTIVE'],['SUPER_ADMIN','ACTIVE'],['ADMIN','PENDING'],['ADMIN','REJECTED']])('is available and submits securely for %s/%s',async(role,status)=>{
+    global.fetch=vi.fn(()=>noContent());await render(account(role,status));const form=passwordForm();const inputs=form.querySelectorAll('input');
+    await setInput(inputs[0],'CurrentSecure123!');await setInput(inputs[1],'DifferentSecure123!');await setInput(inputs[2],'DifferentSecure123!');
+    await act(async()=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await Promise.resolve();await Promise.resolve()});
+    const request=fetch.mock.calls.find(([url])=>String(url).endsWith('/profile/password'));
+    expect(request[1].method).toBe('PUT');expect(JSON.parse(request[1].body)).toEqual({current_password:'CurrentSecure123!',new_password:'DifferentSecure123!'});
+    expect(request[1].body).not.toContain('confirm_password');expect(inputs[0].value).toBe('');expect(container.textContent).toContain('Password changed successfully.');
+  });
+
+  it('rejects a confirmation mismatch without calling the API and preserves entered values',async()=>{
+    global.fetch=vi.fn();await render(account('LEARNER'));const form=passwordForm();const inputs=form.querySelectorAll('input');await setInput(inputs[0],'CurrentSecure123!');await setInput(inputs[1],'DifferentSecure123!');await setInput(inputs[2],'MismatchSecure123!');await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(fetch).not.toHaveBeenCalled();expect(container.textContent).toContain('New passwords do not match.');expect(inputs[1].value).toBe('DifferentSecure123!');
+  });
+
+  it('shows backend password errors and prevents duplicate submission while pending',async()=>{
+    let resolveRequest;global.fetch=vi.fn(()=>new Promise(resolve=>{resolveRequest=resolve}));await render(account('ADMIN'));const form=passwordForm();const inputs=form.querySelectorAll('input');await setInput(inputs[0],'WrongPassword!');await setInput(inputs[1],'DifferentSecure123!');await setInput(inputs[2],'DifferentSecure123!');act(()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(form.querySelector('button').disabled).toBe(true);await act(async()=>resolveRequest({ok:false,status:401,json:()=>Promise.resolve({detail:'Current password is incorrect'})}));expect(container.textContent).toContain('Current password is incorrect');expect(inputs[0].value).toBe('WrongPassword!');
+  });
+});

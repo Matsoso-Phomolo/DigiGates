@@ -3,7 +3,7 @@ import React,{act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {MemoryRouter} from 'react-router-dom';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
-import App from './App.jsx';
+import App,{matchVoiceCommand} from './App.jsx';
 
 const account=(role,approval_status='ACTIVE',is_active=true)=>({user_id:1,full_name:'Verified User',email:'verified@example.com',role,approval_status,gender:null,date_of_birth:null,is_active,created_at:'2026-01-01T00:00:00',updated_at:'2026-01-01T00:00:00'});
 const response=value=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(value)});
@@ -190,5 +190,56 @@ describe('persisted global theme control',()=>{
     expect(localStorage.getItem('dg_theme')).toBe('light');
     expect(document.documentElement.dataset.theme).toBe('light');
     expect(container.querySelector('.roleDashboardLink')).toBeNull();
+  });
+});
+
+describe('role-aware voice commands',()=>{
+  const destination=(role,status,text)=>matchVoiceCommand(account(role,status),text)?.to;
+
+  it.each([
+    ['Learn','/learn'],['open explore','/explore'],['Go to Build!','/build'],['Navigate to Profile.','/profile'],['open my profile','/profile'],
+  ])('maps Learner command %s', (command,path)=>expect(destination('LEARNER','ACTIVE',command)).toBe(path));
+
+  it.each([
+    ['show learners','/admin?section=learners'],['PROFILE','/profile'],
+  ])('maps Admin command %s', (command,path)=>expect(destination('ADMIN','ACTIVE',command)).toBe(path));
+
+  it.each([
+    ['Open Admin Requests','/super-admin?section=requests'],['learners','/super-admin?section=learners'],['go to administrators','/super-admin?section=admins'],['profile','/profile'],
+  ])('maps Super Admin command %s', (command,path)=>expect(destination('SUPER_ADMIN','ACTIVE',command)).toBe(path));
+
+  it('does not use unrestricted substring matching or cross role permissions',()=>{
+    expect(destination('LEARNER','ACTIVE','administrators')).toBeUndefined();
+    expect(destination('ADMIN','ACTIVE','admin requests')).toBeUndefined();
+    expect(destination('SUPER_ADMIN','ACTIVE','please open administrators now')).toBeUndefined();
+    expect(destination('SUPER_ADMIN','ACTIVE','administrator requests')).toBeUndefined();
+  });
+
+  it.each(['PENDING','REJECTED'])('limits a %s Admin to Profile',status=>{
+    expect(destination('ADMIN',status,'profile')).toBe('/profile');
+    expect(destination('ADMIN',status,'learners')).toBeUndefined();
+  });
+});
+
+describe('speech recognition interaction',()=>{
+  let container;let root;let recognition;
+  beforeEach(()=>{globalThis.IS_REACT_ACT_ENVIRONMENT=true;global.ResizeObserver=class{observe(){}disconnect(){}};container=document.createElement('div');document.body.appendChild(container);root=createRoot(container)});
+  afterEach(()=>{act(()=>root.unmount());container.remove();localStorage.clear();delete window.SpeechRecognition;delete global.ResizeObserver;vi.restoreAllMocks()});
+  async function renderLearner(){localStorage.setItem('dg_token','test-token');global.fetch=vi.fn(url=>String(url).endsWith('/profile')?response(account('LEARNER')):response(emptyPage));await act(async()=>{root.render(<MemoryRouter initialEntries={['/learn']}><App/></MemoryRouter>);await new Promise(resolve=>setTimeout(resolve,0))})}
+
+  it('shows unsupported-browser feedback',async()=>{await renderLearner();const button=[...container.querySelectorAll('button')].find(x=>x.textContent.includes('Voice'));await act(async()=>button.click());expect(container.querySelector('[role="status"]').textContent).toContain('not supported')});
+
+  it('indicates listening, blocks duplicate activation, navigates, and ends cleanly',async()=>{
+    window.SpeechRecognition=class{constructor(){recognition=this}start(){this.onstart()}abort(){this.onerror?.({error:'aborted'});this.onend?.()}};
+    await renderLearner();let button=[...container.querySelectorAll('button')].find(x=>x.textContent.includes('Voice'));
+    await act(async()=>button.click());button=[...container.querySelectorAll('button')].find(x=>x.textContent.includes('Listening'));
+    expect(button.disabled).toBe(true);expect(button.getAttribute('aria-pressed')).toBe('true');
+    await act(async()=>{recognition.onresult({results:[[{transcript:'Open Build'}]]});recognition.onend();await Promise.resolve()});
+    expect(container.textContent).toContain('BUILD • SVG CIRCUIT WORKSPACE');expect(container.textContent).toContain('Opening Build.');
+  });
+
+  it('reports microphone permission denial without navigating',async()=>{
+    window.SpeechRecognition=class{constructor(){recognition=this}start(){this.onstart()}abort(){this.onend?.()}};
+    await renderLearner();const button=[...container.querySelectorAll('button')].find(x=>x.textContent.includes('Voice'));await act(async()=>button.click());await act(async()=>{recognition.onerror({error:'not-allowed'});recognition.onend();await Promise.resolve()});expect(container.textContent).toContain('Microphone permission is required');expect(container.textContent).toContain('LEARN • OPERATOR');
   });
 });

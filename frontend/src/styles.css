@@ -139,6 +139,7 @@
 
 /* Unified authenticated workspace navigation */
 .workspaceMenu{display:flex;align-items:center;gap:10px;flex:1;min-width:0}.workspaceMenu nav{display:flex}.workspaceActions{display:flex;align-items:center;gap:10px}.workspaceHead nav a,.workspaceActions button{display:flex;align-items:center;gap:8px;border:0;background:transparent;text-transform:capitalize}.workspaceHead nav a.active{color:var(--green)}.workspaceMenuToggle{display:none;border:0;background:transparent;padding:9px}
+.workspaceActions button.listening{color:var(--green);background:#0c3023}.voiceFeedback{position:absolute;right:4.5%;top:calc(100% + 8px);max-width:min(420px,90vw);padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 8px 25px #0006;font-size:13px;z-index:25}
 @media(max-width:700px){.workspaceHead{height:72px;justify-content:space-between;position:sticky}.workspaceHead .logo{min-width:0}.workspaceHead .logo b{font-size:21px}.workspaceMenuToggle{display:flex;align-items:center;justify-content:center}.workspaceMenu{display:none;position:absolute;left:0;right:0;top:72px;padding:14px 18px 18px;background:#020a16;border-bottom:1px solid var(--line);box-shadow:0 14px 25px #0008}.workspaceMenu.open{display:grid}.workspaceHead .workspaceMenu nav{display:grid;gap:4px;justify-content:stretch;overflow:visible}.workspaceHead .workspaceMenu nav a{padding:12px 14px;border-radius:8px}.workspaceHead .workspaceMenu nav a.active{background:#0c3023}.workspaceActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;border-top:1px solid var(--line);padding-top:12px}.workspaceActions button,.workspaceActions .profileTrigger{justify-content:flex-start!important;min-height:48px}.workspaceActions .profileTrigger{grid-column:1/-1}.workspaceActions .profileTrigger b{display:block}.workspaceActions button[title="Sign out"]{color:#ff8992}}
 
 /* Viewport-safe authentication dialog */
@@ -187,5 +188,6 @@ html[data-theme="light"] .deleteWarning{background:#fff0f1;color:#8e2530}
 html[data-theme="light"] .studentTable th{color:#075f9e}
 html[data-theme="light"] .workspaceMenu{background:rgba(255,255,255,.98)}
 html[data-theme="light"] .workspaceHead .workspaceMenu nav a.active{background:#e1f3e2}
+html[data-theme="light"] .workspaceActions button.listening{background:#e1f3e2}
 html[data-theme="light"] :focus-visible{outline-color:#248b2d}
 @media(max-width:700px){.authBtns button.themeToggle{display:flex}.authBtns{gap:5px}html[data-theme="light"] .workspaceMenu{box-shadow:0 14px 25px #29465c2b}}

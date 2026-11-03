@@ -29,8 +29,13 @@ def test_profile_read_update_password_and_deactivate(mysql_client):
     wrong=mysql_client.put("/api/profile/password",headers=headers,json={"current_password":"WrongPassword!","new_password":"NewSecure123!"})
     assert wrong.status_code==401
 
+    reused=mysql_client.put("/api/profile/password",headers=headers,json={"current_password":"Secure123!","new_password":"Secure123!"})
+    assert reused.status_code==400
+
     changed=mysql_client.put("/api/profile/password",headers=headers,json={"current_password":"Secure123!","new_password":"NewSecure123!"})
     assert changed.status_code==204
+    # The existing stateless JWT remains valid until its configured expiry.
+    assert mysql_client.get("/api/profile",headers=headers).status_code==200
 
     old_login=mysql_client.post("/api/auth/login",json={"email":"updated@example.com","password":"Secure123!"})
     assert old_login.status_code==401
