@@ -89,28 +89,23 @@ describe('Administrator learner lifecycle actions',()=>{
   });
 });
 
-describe('Profile role navigation',()=>{
+describe('Profile role content',()=>{
   let container; let root;
   const account=(role,approval_status='ACTIVE')=>({user_id:1,full_name:'Role User',email:'role@example.com',role,approval_status,gender:null,date_of_birth:null,is_active:true});
   const renderProfile=user=>act(async()=>{root.render(<MemoryRouter><ProfileV2 user={user} onUserChange={()=>{}} logout={()=>{}}/></MemoryRouter>);await Promise.resolve()});
   beforeEach(()=>{container=document.createElement('div');document.body.appendChild(container);root=createRoot(container)});
   afterEach(()=>{act(()=>root.unmount());container.remove()});
 
-  it('links an active Super Admin to the Super Admin dashboard',async()=>{
-    await renderProfile(account('SUPER_ADMIN'));
-    const link=[...container.querySelectorAll('a')].find(x=>x.textContent.includes('Super Admin Dashboard'));
-    expect(link?.getAttribute('href')).toBe('/super-admin?section=requests');
-  });
-
-  it('links an approved active Admin to the Admin dashboard',async()=>{
-    await renderProfile(account('ADMIN'));
-    const link=[...container.querySelectorAll('a')].find(x=>x.textContent.includes('Admin Dashboard'));
-    expect(link?.getAttribute('href')).toBe('/admin?section=learners');
-  });
-
-  it.each([['LEARNER','ACTIVE'],['ADMIN','PENDING'],['ADMIN','REJECTED']])('hides administrative navigation for %s/%s',async(role,status)=>{
+  it.each([['LEARNER','ACTIVE'],['ADMIN','ACTIVE'],['SUPER_ADMIN','ACTIVE'],['ADMIN','PENDING'],['ADMIN','REJECTED']])('omits Authorized Workspace while retaining profile functions for %s/%s',async(role,status)=>{
     await renderProfile(account(role,status));
-    expect(container.querySelector('.roleDashboardLink')).toBeNull();
+    expect(container.textContent).not.toContain('AUTHORIZED WORKSPACE');
+    expect(container.textContent).not.toContain('Open Admin Dashboard');
+    expect(container.textContent).not.toContain('Open Super Admin Dashboard');
+    expect(container.querySelector('.roleDashboardCallout')).toBeNull();
+    expect(container.textContent).toContain('Personal Information');
+    expect(container.textContent).toContain('Saved Profile');
+    expect(container.textContent).toContain('Change Password');
+    expect(container.textContent).toContain('Delete My Account');
   });
 });
 

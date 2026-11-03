@@ -82,10 +82,10 @@ describe('verified application session navigation',()=>{
 
   it('removes privileged navigation when the verified user logs out',async()=>{
     await renderWithBackendUser(account('SUPER_ADMIN'));
-    expect(container.querySelector('.roleDashboardLink')?.getAttribute('href')).toBe('/super-admin?section=requests');
+    expect(coreLinks()).toHaveProperty('admin requests','/super-admin?section=requests');
     const logout=container.querySelector('button[title="Sign out"]');
     await act(async()=>{logout.dispatchEvent(new MouseEvent('click',{bubbles:true}));await Promise.resolve()});
-    expect(container.querySelector('.roleDashboardLink')).toBeNull();
+    expect(container.querySelector('.workspaceMenu')).toBeNull();
     expect(localStorage.getItem('dg_token')).toBeNull();
   });
 });
