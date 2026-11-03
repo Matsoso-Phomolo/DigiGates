@@ -18,23 +18,23 @@ describe('Super Admin account lists',()=>{
   });
   afterEach(()=>{act(()=>root.unmount());container.remove();localStorage.clear();vi.restoreAllMocks()});
 
-  it('fetches the correct list whenever the role tab changes',async()=>{
+  it('renders every URL-selected section without a duplicate sidebar',async()=>{
     global.fetch=vi.fn((url)=>ok(url.includes('admin-requests')?[]:page));
-    await act(async()=>{root.render(<MemoryRouter initialEntries={['/super-admin?section=requests']}><SuperAdminPortal/></MemoryRouter>);await Promise.resolve()});
-    const button=label=>[...container.querySelectorAll('button')].find(x=>x.textContent===label);
-    await click(button('Learners'));
-    expect(container.querySelector('.side button.active')?.textContent).toBe('Learners');
-    await click(button('Administrators'));
-    expect(container.querySelector('.side button.active')?.textContent).toBe('Administrators');
+    const renderSection=path=>act(async()=>{root.render(<MemoryRouter key={path} initialEntries={[path]}><SuperAdminPortal/></MemoryRouter>);await Promise.resolve()});
+    await renderSection('/super-admin?section=requests');
+    expect(container.textContent).toContain('Pending Admin Requests');
+    expect(container.querySelector('.adminPortal aside')).toBeNull();
+    await renderSection('/super-admin?section=learners');
+    expect(container.querySelector('.userManager h1')?.textContent).toBe('Learners');
+    await renderSection('/super-admin?section=admins');
+    expect(container.querySelector('.userManager h1')?.textContent).toBe('Administrators');
     expect(fetch.mock.calls.some(([url])=>url.includes('/admin/learners?page=1&page_size=10&q='))).toBe(true);
     expect(fetch.mock.calls.some(([url])=>url.includes('/super-admin/admins?page=1&page_size=10&q='))).toBe(true);
   });
 
   it('does not describe a failed request as an empty account list',async()=>{
     global.fetch=vi.fn((url)=>url.includes('admin-requests')?ok([]):Promise.reject(new TypeError('Failed to fetch')));
-    await act(async()=>{root.render(<MemoryRouter initialEntries={['/super-admin?section=requests']}><SuperAdminPortal/></MemoryRouter>);await Promise.resolve()});
-    const learners=[...container.querySelectorAll('button')].find(x=>x.textContent==='Learners');
-    await click(learners);
+    await act(async()=>{root.render(<MemoryRouter initialEntries={['/super-admin?section=learners']}><SuperAdminPortal/></MemoryRouter>);await Promise.resolve()});
     expect(container.textContent).toContain('Failed to fetch');
     expect(container.textContent).toContain('Unable to load accounts.');
     expect(container.textContent).not.toContain('No accounts match this search.');
@@ -57,6 +57,8 @@ describe('Administrator learner lifecycle actions',()=>{
       return ok({...page,items,total:items.length});
     });
     await act(async()=>{root.render(<MemoryRouter initialEntries={['/admin?section=learners']}><AdminPortal/></MemoryRouter>);await Promise.resolve()});
+    expect(container.querySelector('.adminPortal aside')).toBeNull();
+    expect(container.querySelector('.adminPortal>.content')).not.toBeNull();
     const row=email=>[...container.querySelectorAll('tbody tr')].find(x=>x.children[1]?.textContent===email);
     expect(row('active@example.com').textContent).toContain('Deactivate');
     expect(row('active@example.com').textContent).not.toContain('Reactivate');

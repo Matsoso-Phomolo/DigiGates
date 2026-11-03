@@ -33,7 +33,7 @@ describe('verified application session navigation',()=>{
     await renderWithBackendUser(account('ADMIN'),account('ADMIN'),'/admin?section=learners');
     expect(coreLinks()).toEqual({learners:'/admin?section=learners'});
     expect(container.querySelector('.workspaceMenu nav a.active')?.textContent).toContain('Learners');
-    expect(container.querySelector('.side button.active')?.textContent).toBe('Learners');
+    expect(container.querySelector('.adminPortal aside')).toBeNull();
     expect(container.querySelector('.workspaceActions').children).toHaveLength(4);
   });
 
@@ -41,15 +41,15 @@ describe('verified application session navigation',()=>{
     await renderWithBackendUser(account('SUPER_ADMIN'),account('SUPER_ADMIN'),'/super-admin?section=requests');
     expect(coreLinks()).toEqual({'admin requests':'/super-admin?section=requests',learners:'/super-admin?section=learners',administrators:'/super-admin?section=admins'});
     expect(container.querySelector('.workspaceMenu nav a.active')?.textContent).toContain('Admin Requests');
-    expect(container.querySelector('.side button.active')?.textContent).toBe('Admin Requests');
+    expect(container.querySelector('.adminPortal aside')).toBeNull();
     expect(container.querySelector('.workspaceActions').children).toHaveLength(4);
   });
 
-  it('marks the current Super Admin section active in both header and sidebar',async()=>{
+  it('marks the current Super Admin URL section active in the shared header',async()=>{
     await renderWithBackendUser(account('SUPER_ADMIN'),account('SUPER_ADMIN'),'/super-admin?section=requests');
     expect(container.querySelector('.workspaceMenu nav a.active')?.textContent).toContain('Admin Requests');
     expect(container.querySelector('.workspaceMenu nav a.active')?.getAttribute('aria-current')).toBe('page');
-    expect(container.querySelector('.side button.active')?.textContent).toBe('Admin Requests');
+    expect(container.querySelector('.adminPortal aside')).toBeNull();
   });
 
   it.each(['ADMIN','SUPER_ADMIN'])('does not grant %s access to Learner routes',async role=>{
