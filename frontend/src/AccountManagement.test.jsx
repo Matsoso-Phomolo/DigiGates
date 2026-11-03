@@ -67,8 +67,8 @@ describe('Administrator learner lifecycle actions',()=>{
 
     await click([...row('inactive@example.com').querySelectorAll('button')].find(x=>x.textContent==='Edit'));
     expect(container.querySelector('.managedForm input[type="email"]').value).toBe('inactive@example.com');
-    expect(container.querySelector('.managedForm input[placeholder="YYYY-MM-DD"]').value).toBe('2001-02-03');
-    expect(row('inactive@example.com').textContent).toContain('2001-02-03');
+    expect(container.querySelector('.managedForm input[placeholder="YYYY/MM/DD"]').value).toBe('2001/02/03');
+    expect(row('inactive@example.com').textContent).toContain('2001/02/03');
     await click([...container.querySelectorAll('.managedForm button')].find(x=>x.textContent==='Cancel'));
 
     await click([...row('active@example.com').querySelectorAll('button')].find(x=>x.textContent==='Deactivate'));
@@ -106,8 +106,8 @@ describe('Profile role content',()=>{
     expect(container.querySelector('.roleDashboardCallout')).toBeNull();
     expect(container.textContent).toContain('Personal Information');
     expect(container.textContent).toContain('Saved Profile');
-    expect(container.textContent).toContain('1995-06-01');
-    expect(container.querySelector('input[placeholder="YYYY-MM-DD"]').value).toBe('1995-06-01');
+    expect(container.textContent).toContain('1995/06/01');
+    expect(container.querySelector('input[placeholder="YYYY/MM/DD"]').value).toBe('1995/06/01');
     expect(container.textContent).toContain('Change Password');
     expect(container.textContent).toContain('Delete My Account');
   });
@@ -122,7 +122,7 @@ describe('Universal profile password change',()=>{
   async function render(user){await act(async()=>{root.render(<MemoryRouter><ProfileV2 user={user} onUserChange={()=>{}} logout={()=>{}}/></MemoryRouter>);await Promise.resolve()})}
   function passwordForm(){return [...container.querySelectorAll('form')].find(form=>form.textContent.includes('Change Password'))}
 
-  it.each([['LEARNER','ACTIVE'],['ADMIN','ACTIVE'],['SUPER_ADMIN','ACTIVE'],['ADMIN','PENDING'],['ADMIN','REJECTED']])('is available and submits securely for %s/%s',async(role,status)=>{
+  it.each([['LEARNER','ACTIVE'],['ADMIN','ACTIVE'],['SUPER_ADMIN','ACTIVE']])('is available and submits securely for %s/%s',async(role,status)=>{
     global.fetch=vi.fn(()=>noContent());await render(account(role,status));const form=passwordForm();const inputs=form.querySelectorAll('input');
     await setInput(inputs[0],'CurrentSecure123!');await setInput(inputs[1],'DifferentSecure123!');await setInput(inputs[2],'DifferentSecure123!');
     await act(async()=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await Promise.resolve();await Promise.resolve()});

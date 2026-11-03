@@ -26,12 +26,15 @@ def test_last_super_admin_requires_successor(mysql_client):
     make_user(UserRole.SUPER_ADMIN,'successor-super@example.com')
     assert mysql_client.request('DELETE','/api/profile',headers=headers,json={"current_password":"Secure123!","confirmation":"DELETE"}).status_code==204
 
-def test_pending_admin_has_self_service_but_no_admin_access(mysql_client):
+def test_pending_admin_has_no_authenticated_access(mysql_client):
     response=mysql_client.post('/api/auth/register',json={"full_name":"Pending Admin","email":"pending-admin@example.com","password":"Secure123!","requested_role":"ADMIN"})
     assert response.status_code==201 and response.json()['status']=='PENDING'
     login=mysql_client.post('/api/auth/login',json={"email":"pending-admin@example.com","password":"Secure123!"})
-    headers={"Authorization":"Bearer "+login.json()['access_token']}
-    assert mysql_client.get('/api/profile',headers=headers).status_code==200
+    assert login.status_code==403
+    with SessionLocal() as db:
+        user=db.query(User).filter(User.email=='pending-admin@example.com').one()
+        headers={"Authorization":"Bearer "+token_for(user)}
+    assert mysql_client.get('/api/profile',headers=headers).status_code==403
     assert mysql_client.get('/api/admin/learners',headers=headers).status_code==403
 
 def test_admin_cannot_manage_admin_through_learner_endpoint(mysql_client):
@@ -39,13 +42,11 @@ def test_admin_cannot_manage_admin_through_learner_endpoint(mysql_client):
     target_id,_=make_user(UserRole.ADMIN,'target-admin@example.com')
     assert mysql_client.delete(f'/api/admin/learners/{target_id}',headers=admin_headers).status_code==404
 
-def test_password_change_is_available_to_every_authenticated_role_and_pending_admin(mysql_client):
+def test_password_change_is_available_to_every_approved_authenticated_role(mysql_client):
     cases=[
         (UserRole.LEARNER,ApprovalStatus.ACTIVE,'password-learner@example.com'),
         (UserRole.ADMIN,ApprovalStatus.ACTIVE,'password-admin@example.com'),
         (UserRole.SUPER_ADMIN,ApprovalStatus.ACTIVE,'password-super@example.com'),
-        (UserRole.ADMIN,ApprovalStatus.PENDING,'password-pending@example.com'),
-        (UserRole.ADMIN,ApprovalStatus.REJECTED,'password-rejected@example.com'),
     ]
     for role,status,email in cases:
         with SessionLocal() as db:

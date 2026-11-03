@@ -60,8 +60,9 @@ describe('verified application session navigation',()=>{
 
   it.each(['PENDING','REJECTED'])('does not expose learning or administrative navigation to a %s Admin',async status=>{
     await renderWithBackendUser(account('ADMIN',status));
-    expect(coreLinks()).toEqual({});
-    expect(container.querySelector('.roleDashboardLink')).toBeNull();
+    expect(container.querySelector('.workspaceMenu')).toBeNull();
+    expect(localStorage.getItem('dg_token')).toBeNull();
+    expect(container.textContent).not.toContain('ACCOUNT • PROFILE');
   });
 
   it('provides an accessible collapsible navigation menu',async()=>{
@@ -105,7 +106,7 @@ describe('authentication dialog accessibility',()=>{
     expect(form.textContent).toContain('Full Name');
     expect(form.textContent).toContain('Account type');
     expect(form.textContent).toContain('Date of Birth');
-    expect(form.querySelector('input[placeholder="YYYY-MM-DD"]')?.type).toBe('text');
+    expect(form.querySelector('input[placeholder="YYYY/MM/DD"]')?.type).toBe('text');
     expect(form.textContent).toContain('Email Address');
     expect(form.textContent).toContain('Password');
     expect(form.textContent).toContain('Submit Registration');
@@ -124,10 +125,22 @@ describe('authentication dialog accessibility',()=>{
   });
 
   it('submits optional registration birth dates as unshifted ISO values and rejects impossible dates',async()=>{
-    global.fetch=vi.fn(()=>response({message:'Registration received'}));await renderAt('/signup');const form=container.querySelector('.authDialog form'),dateInput=form.querySelector('input[placeholder="YYYY-MM-DD"]');
+    global.fetch=vi.fn(()=>response({message:'Registration received'}));await renderAt('/signup');const form=container.querySelector('.authDialog form'),dateInput=form.querySelector('input[placeholder="YYYY/MM/DD"]');
     const setValue=(input,value)=>act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));await Promise.resolve()});
-    await setValue(dateInput,'2026-02-30');await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(fetch).not.toHaveBeenCalled();expect(container.textContent).toContain('valid calendar date');
-    await setValue(dateInput,'1995-06-01');await setValue(form.querySelector('input[type="email"]'),'dated@example.com');await setValue(form.querySelector('input[type="password"]'),'Secure123!');await setValue(form.querySelector('input:not([type])'),'Dated User');await act(async()=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await Promise.resolve();await Promise.resolve()});const payload=JSON.parse(fetch.mock.calls[0][1].body);expect(payload.date_of_birth).toBe('1995-06-01');
+    await setValue(dateInput,'2026/02/30');await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(fetch).not.toHaveBeenCalled();expect(container.textContent).toContain('valid calendar date');
+    await setValue(dateInput,'1995/06/01');await setValue(form.querySelector('input[type="email"]'),'dated@example.com');await setValue(form.querySelector('input[type="password"]'),'Secure123!');await setValue(form.querySelector('input:not([type])'),'Dated User');await act(async()=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await Promise.resolve();await Promise.resolve()});const payload=JSON.parse(fetch.mock.calls[0][1].body);expect(payload.date_of_birth).toBe('1995-06-01');
+  });
+
+  it('does not create a session for a pending Administrator registration',async()=>{
+    global.fetch=vi.fn(()=>response({status:'PENDING',message:'Administrator registration submitted. Super Admin approval is required.',user:account('ADMIN','PENDING')}));
+    await renderAt('/signup');
+    const form=container.querySelector('.authDialog form'),inputs=form.querySelectorAll('input'),role=form.querySelector('select');
+    const setValue=(input,value)=>act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));await Promise.resolve()});
+    await act(async()=>{role.value='ADMIN';role.dispatchEvent(new Event('change',{bubbles:true}));await Promise.resolve()});
+    await setValue(inputs[0],'Pending Admin');await setValue(form.querySelector('input[type="email"]'),'pending@example.com');await setValue(form.querySelector('input[type="password"]'),'Secure123!');
+    await act(async()=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await Promise.resolve();await Promise.resolve()});
+    expect(localStorage.getItem('dg_token')).toBeNull();
+    expect(container.textContent).toContain('Super Admin approval is required');
   });
 
   it('closes on Escape and restores background scrolling',async()=>{
@@ -180,8 +193,6 @@ describe('persisted global theme control',()=>{
     ['LEARNER','ACTIVE','/learn'],
     ['ADMIN','ACTIVE','/admin?section=learners'],
     ['SUPER_ADMIN','ACTIVE','/super-admin?section=requests'],
-    ['ADMIN','PENDING','/profile'],
-    ['ADMIN','REJECTED','/profile'],
   ])('is available independently of %s/%s authorization',async(role,status,path)=>{
     await renderAt(path,account(role,status));
     const toggle=container.querySelector('.themeToggle');
@@ -224,8 +235,8 @@ describe('role-aware voice commands',()=>{
     expect(destination('SUPER_ADMIN','ACTIVE','administrator requests')).toBeUndefined();
   });
 
-  it.each(['PENDING','REJECTED'])('limits a %s Admin to Profile',status=>{
-    expect(destination('ADMIN',status,'profile')).toBe('/profile');
+  it.each(['PENDING','REJECTED'])('denies all authenticated voice destinations to a %s Admin',status=>{
+    expect(destination('ADMIN',status,'profile')).toBeUndefined();
     expect(destination('ADMIN',status,'learners')).toBeUndefined();
   });
 });

@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Link} from 'react-router-dom';
 import {api} from './api.js';
-import IsoDateInput,{isoDateError} from './IsoDateInput.jsx';
+import IsoDateInput,{dateForApi,displayDateError} from './IsoDateInput.jsx';
 
 const genders=[['MALE','Male'],['FEMALE','Female'],['NON_BINARY','Non-binary'],['PREFER_NOT_TO_SAY','Prefer not to say']];
 
@@ -27,9 +27,9 @@ export default function AuthModalV2({mode,setMode,close,onAuth}){
   },[close]);
   async function submit(event){
     event.preventDefault();setError('');
-    if(mode==='register'){const dateError=isoDateError(form.date_of_birth);if(dateError){setError(dateError);return}}
+    if(mode==='register'){const dateError=displayDateError(form.date_of_birth);if(dateError){setError(dateError);return}}
     try{
-      const payload=mode==='login'?{email:form.email,password:form.password}:{...form,gender:form.gender||null,date_of_birth:form.date_of_birth||null};
+      const payload=mode==='login'?{email:form.email,password:form.password}:{...form,gender:form.gender||null,date_of_birth:dateForApi(form.date_of_birth)};
       const data=await api(`/auth/${mode}`,{method:'POST',body:JSON.stringify(payload)});
       if(!data.access_token){setNotice(data.message);return}
       localStorage.setItem('dg_token',data.access_token);onAuth(data.user);

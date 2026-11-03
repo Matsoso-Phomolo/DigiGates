@@ -20,9 +20,9 @@ def authenticated_account(credentials: HTTPAuthorizationCredentials = Depends(be
     except (JWTError, KeyError, ValueError): raise HTTPException(401, "Invalid or expired token")
     user = db.get(User, user_id)
     if not user or not user.is_active: raise HTTPException(401, "Account unavailable")
+    if user.approval_status != ApprovalStatus.ACTIVE: raise HTTPException(403, "Account is not approved")
     return user
 def current_user(user:User=Depends(authenticated_account)):
-    if user.approval_status != ApprovalStatus.ACTIVE: raise HTTPException(403, f"Account approval status is {user.approval_status.value}")
     return user
 def admin_user(user: User = Depends(current_user)):
     if user.role not in (UserRole.ADMIN,UserRole.SUPER_ADMIN): raise HTTPException(403, "Administrator role required")

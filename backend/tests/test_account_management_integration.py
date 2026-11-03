@@ -14,6 +14,8 @@ def test_super_admin_approval_and_rejection(mysql_client):
     pending=mysql_client.post("/api/auth/register",json={"full_name":"Pending Admin","email":"pending-approve@example.com","password":"Secure123!","requested_role":"ADMIN"})
     assert pending.status_code==201 and pending.json()["status"]=="PENDING"
     pending_id=pending.json()["user"]["user_id"]
+    assert "access_token" not in pending.json()
+    assert mysql_client.post("/api/auth/login",json={"email":"pending-approve@example.com","password":"Secure123!"}).status_code==403
     assert mysql_client.get("/api/super-admin/admin-requests",headers=super_headers).status_code==200
     approved=mysql_client.post(f"/api/super-admin/admin-requests/{pending_id}/decision",headers=super_headers,json={"decision":"APPROVE","note":"Verified"})
     assert approved.status_code==200 and approved.json()["approval_status"]=="ACTIVE"
@@ -23,11 +25,14 @@ def test_super_admin_approval_and_rejection(mysql_client):
 
     rejected=mysql_client.post("/api/auth/register",json={"full_name":"Rejected Admin","email":"pending-reject@example.com","password":"Secure123!","requested_role":"ADMIN"})
     rejected_id=rejected.json()["user"]["user_id"]
+    with SessionLocal() as db:
+        rejected_user=db.get(User,rejected_id)
+        rejected_headers={"Authorization":"Bearer "+token_for(rejected_user)}
     decision=mysql_client.post(f"/api/super-admin/admin-requests/{rejected_id}/decision",headers=super_headers,json={"decision":"REJECT","note":"Not approved"})
     assert decision.status_code==200 and decision.json()["approval_status"]=="REJECTED"
     rejected_login=mysql_client.post("/api/auth/login",json={"email":"pending-reject@example.com","password":"Secure123!"})
-    rejected_headers={"Authorization":"Bearer "+rejected_login.json()["access_token"]}
-    assert mysql_client.get("/api/profile",headers=rejected_headers).status_code==200
+    assert rejected_login.status_code==403
+    assert mysql_client.get("/api/profile",headers=rejected_headers).status_code==403
     assert mysql_client.get("/api/admin/learners",headers=rejected_headers).status_code==403
     history=mysql_client.get("/api/super-admin/approval-history",headers=super_headers)
     assert history.status_code==200 and len(history.json())>=2

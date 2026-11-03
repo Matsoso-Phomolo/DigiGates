@@ -44,6 +44,8 @@ def login(data:Login,db:Session=Depends(get_db)):
     user=db.scalar(select(User).where(User.email==str(data.email).lower()))
     if not user or not verify_password(data.password,user.password_hash): raise HTTPException(401,"Incorrect email or password")
     if not user.is_active: raise HTTPException(403,"Account is inactive")
+    if user.approval_status==ApprovalStatus.PENDING: raise HTTPException(403,"Administrator approval is pending")
+    if user.approval_status==ApprovalStatus.REJECTED: raise HTTPException(403,"Administrator registration was not approved")
     return Token(access_token=token_for(user),user=user)
 @app.get("/api/auth/me",response_model=UserOut)
 def me(user=Depends(current_user)): return user
