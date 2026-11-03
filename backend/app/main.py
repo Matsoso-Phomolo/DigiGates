@@ -9,7 +9,7 @@ from .config import settings
 from .database import get_db
 from .models import AdminApproval, ApprovalStatus, Exercise, ExerciseAttempt, Lesson, LogicGate, PrebuiltCircuit, Progress, ProgressStatus, SavedCircuit, User, UserRole
 from .schemas import AdminRegistrationPending, ApprovalDecision, ApprovalHistoryOut, AttemptCreate, AttemptOut, ExerciseCreate, ExerciseOut, ExerciseUpdate, GateCreate, GateOut, GateUpdate, LessonCreate, LessonOut, LessonUpdate, Login, ManagedUserCreate, ManagedUserUpdate, PrebuiltCreate, PrebuiltOut, PrebuiltUpdate, ProgressOut, ProgressUpsert, Register, SavedCircuitCreate, SavedCircuitOut, SavedCircuitUpdate, Token, UserOut, UserPage, AccountConfirmation, AccountDeleteConfirmation, PasswordChange, ProfileUpdate
-from .account_service import anonymize_and_revoke, ensure_super_admin_succession, update_own_profile
+from .account_service import ensure_super_admin_succession, permanently_delete_user, update_own_profile
 from .security import admin_user, authenticated_account, current_user, hash_password, super_admin_user, token_for, verify_password
 
 app=FastAPI(title="DigiGates API",version="2.0.0")
@@ -78,7 +78,7 @@ def deactivate_account(data:AccountConfirmation,db:Session=Depends(get_db),user=
 @app.delete("/api/profile",status_code=204)
 def delete_account(data:AccountDeleteConfirmation,db:Session=Depends(get_db),user=Depends(authenticated_account)):
     if not verify_password(data.current_password,user.password_hash): raise HTTPException(401,"Current password is incorrect")
-    anonymize_and_revoke(db,user)
+    permanently_delete_user(db,user)
     commit(db)
     return Response(status_code=204)
 
@@ -120,9 +120,15 @@ def create_learner(data:ManagedUserCreate,db:Session=Depends(get_db),_=Depends(a
 @app.put("/api/admin/learners/{item_id}",response_model=UserOut)
 def update_learner(item_id:int,data:ManagedUserUpdate,db:Session=Depends(get_db),_=Depends(admin_user)):
     user=managed_user(db,item_id,UserRole.LEARNER); apply_user_fields(db,user,data); commit(db); db.refresh(user); return user
+@app.post("/api/admin/learners/{item_id}/deactivate",status_code=204)
+def deactivate_learner(item_id:int,db:Session=Depends(get_db),_=Depends(admin_user)):
+    user=managed_user(db,item_id,UserRole.LEARNER); user.is_active=False; commit(db); return Response(status_code=204)
+@app.post("/api/admin/learners/{item_id}/reactivate",status_code=204)
+def reactivate_learner(item_id:int,db:Session=Depends(get_db),_=Depends(admin_user)):
+    user=managed_user(db,item_id,UserRole.LEARNER); user.is_active=True; commit(db); return Response(status_code=204)
 @app.delete("/api/admin/learners/{item_id}",status_code=204)
 def delete_learner(item_id:int,db:Session=Depends(get_db),_=Depends(admin_user)):
-    user=managed_user(db,item_id,UserRole.LEARNER); user.is_active=False; commit(db); return Response(status_code=204)
+    permanently_delete_user(db,managed_user(db,item_id,UserRole.LEARNER)); commit(db); return Response(status_code=204)
 
 @app.get("/api/super-admin/admins",response_model=UserPage)
 def admins(page:int=1,page_size:int=20,q:str|None=None,db:Session=Depends(get_db),_=Depends(super_admin_user)):
@@ -137,9 +143,15 @@ def create_admin(data:ManagedUserCreate,db:Session=Depends(get_db),_=Depends(sup
 @app.put("/api/super-admin/admins/{item_id}",response_model=UserOut)
 def update_admin(item_id:int,data:ManagedUserUpdate,db:Session=Depends(get_db),_=Depends(super_admin_user)):
     user=managed_user(db,item_id,UserRole.ADMIN); apply_user_fields(db,user,data); commit(db); db.refresh(user); return user
+@app.post("/api/super-admin/admins/{item_id}/deactivate",status_code=204)
+def deactivate_admin(item_id:int,db:Session=Depends(get_db),_=Depends(super_admin_user)):
+    user=managed_user(db,item_id,UserRole.ADMIN); user.is_active=False; commit(db); return Response(status_code=204)
+@app.post("/api/super-admin/admins/{item_id}/reactivate",status_code=204)
+def reactivate_admin(item_id:int,db:Session=Depends(get_db),_=Depends(super_admin_user)):
+    user=managed_user(db,item_id,UserRole.ADMIN); user.is_active=True; commit(db); return Response(status_code=204)
 @app.delete("/api/super-admin/admins/{item_id}",status_code=204)
 def delete_admin(item_id:int,db:Session=Depends(get_db),_=Depends(super_admin_user)):
-    user=managed_user(db,item_id,UserRole.ADMIN); user.is_active=False; commit(db); return Response(status_code=204)
+    permanently_delete_user(db,managed_user(db,item_id,UserRole.ADMIN)); commit(db); return Response(status_code=204)
 @app.get("/api/super-admin/admin-requests",response_model=list[UserOut])
 def pending_admins(db:Session=Depends(get_db),_=Depends(super_admin_user)):
     return db.scalars(select(User).where(User.role==UserRole.ADMIN,User.approval_status==ApprovalStatus.PENDING).order_by(User.created_at)).all()

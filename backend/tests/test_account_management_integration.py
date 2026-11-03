@@ -1,5 +1,6 @@
 from app.database import SessionLocal
-from app.models import ApprovalStatus, User, UserRole
+from decimal import Decimal
+from app.models import ApprovalStatus, Exercise, ExerciseAttempt, Lesson, LogicGate, PrebuiltCircuit, Progress, SavedCircuit, User, UserRole
 from app.security import hash_password, token_for
 
 def privileged(role,email):
@@ -39,26 +40,70 @@ def test_role_scoped_account_crud_and_profile_persistence(mysql_client):
     assert "username" not in learner and learner["gender"]=="FEMALE" and learner["date_of_birth"]=="2001-02-03"
     listing=mysql_client.get("/api/admin/learners?q=managed-learner@example.com",headers=admin_headers)
     assert listing.status_code==200 and listing.json()["total"]==1
-    updated=mysql_client.put(f"/api/admin/learners/{learner_id}",headers=admin_headers,json={"full_name":"Updated Learner","email":"managed-learner@example.com","gender":"PREFER_NOT_TO_SAY","date_of_birth":"2001-02-03","is_active":True})
+    updated=mysql_client.put(f"/api/admin/learners/{learner_id}",headers=admin_headers,json={"full_name":"Updated Learner","email":"managed-learner@example.com","gender":"PREFER_NOT_TO_SAY","date_of_birth":"2001-02-03"})
     assert updated.status_code==200 and updated.json()["full_name"]=="Updated Learner"
+    learner_token=mysql_client.post("/api/auth/login",json={"email":"managed-learner@example.com","password":"Secure123!"}).json()["access_token"]
+    learner_headers={"Authorization":"Bearer "+learner_token}
+    assert mysql_client.post(f"/api/admin/learners/{learner_id}/deactivate",headers=admin_headers).status_code==204
+    assert mysql_client.post("/api/auth/login",json={"email":"managed-learner@example.com","password":"Secure123!"}).status_code==403
+    assert mysql_client.get("/api/profile",headers=learner_headers).status_code==401
+    inactive_edit=mysql_client.put(f"/api/admin/learners/{learner_id}",headers=admin_headers,json={"full_name":"Edited While Inactive","email":"managed-learner@example.com","gender":"PREFER_NOT_TO_SAY","date_of_birth":"2001-02-03"})
+    assert inactive_edit.status_code==200 and inactive_edit.json()["is_active"] is False
+    assert mysql_client.post(f"/api/admin/learners/{learner_id}/reactivate",headers=admin_headers).status_code==204
+    assert mysql_client.post("/api/auth/login",json={"email":"managed-learner@example.com","password":"Secure123!"}).status_code==200
     assert mysql_client.delete(f"/api/admin/learners/{learner_id}",headers=admin_headers).status_code==204
+    with SessionLocal() as db: assert db.get(User,learner_id) is None
 
     super_headers=privileged(UserRole.SUPER_ADMIN,"admin-manager@example.com")
     admin=mysql_client.post("/api/super-admin/admins",headers=super_headers,json={"full_name":"Managed Admin","email":"managed-admin@example.com","password":"Secure123!","gender":None,"date_of_birth":None})
     assert admin.status_code==201 and "username" not in admin.json()
     admin_id=admin.json()["user_id"]
     assert mysql_client.get(f"/api/super-admin/admins/{admin_id}",headers=super_headers).status_code==200
-    assert mysql_client.put(f"/api/super-admin/admins/{admin_id}",headers=super_headers,json={"full_name":"Updated Admin","email":"managed-admin@example.com","gender":"NON_BINARY","date_of_birth":"1990-04-05","is_active":True}).status_code==200
+    assert mysql_client.put(f"/api/super-admin/admins/{admin_id}",headers=super_headers,json={"full_name":"Updated Admin","email":"managed-admin@example.com","gender":"NON_BINARY","date_of_birth":"1990-04-05"}).status_code==200
+    assert mysql_client.post(f"/api/super-admin/admins/{admin_id}/deactivate",headers=super_headers).status_code==204
+    assert mysql_client.post(f"/api/super-admin/admins/{admin_id}/reactivate",headers=super_headers).status_code==204
     assert mysql_client.delete(f"/api/super-admin/admins/{admin_id}",headers=super_headers).status_code==204
     assert mysql_client.get("/api/super-admin/admins",headers=admin_headers).status_code==403
+    assert mysql_client.post(f"/api/super-admin/admins/{admin_id}/reactivate",headers=admin_headers).status_code==403
 
-def test_management_list_serializes_anonymized_self_deleted_account(mysql_client):
-    admin_headers=privileged(UserRole.ADMIN,"deleted-list-manager@example.com")
-    registration=mysql_client.post("/api/auth/register",json={"full_name":"Disposable Learner","email":"disposable-list@example.com","password":"Secure123!","requested_role":"LEARNER"})
-    learner_headers={"Authorization":"Bearer "+registration.json()["access_token"]}
-    deleted=mysql_client.request("DELETE","/api/profile",headers=learner_headers,json={"current_password":"Secure123!","confirmation":"DELETE"})
-    assert deleted.status_code==204
-    listing=mysql_client.get("/api/admin/learners?q=deleted-",headers=admin_headers)
-    assert listing.status_code==200
-    assert listing.json()["total"]==1
-    assert listing.json()["items"][0]["email"].endswith("@deleted.invalid")
+def test_permanent_delete_removes_user_owned_records_without_placeholder(mysql_client,circuit_json):
+    admin_headers=privileged(UserRole.ADMIN,"delete-manager@example.com")
+    created=mysql_client.post("/api/admin/learners",headers=admin_headers,json={"full_name":"Owned Data Learner","email":"owned-data@example.com","password":"Secure123!"})
+    learner_id=created.json()["user_id"]
+    with SessionLocal() as db:
+        gate=LogicGate(gate_name="DELETE_TEST_GATE",description="test",input_count=1,boolean_symbol="A",expression_pattern="{A}")
+        db.add(gate); db.flush()
+        lesson=Lesson(gate_id=gate.gate_id,title="Deletion test",theory_content="test",lesson_order=999,is_published=False)
+        db.add(lesson); db.flush()
+        exercise=Exercise(lesson_id=lesson.lesson_id,title="Deletion exercise",instructions="test",exercise_type="test",expected_result={"Y":1},is_published=False)
+        db.add(exercise); db.flush()
+        gate_id,lesson_id,exercise_id=gate.gate_id,lesson.lesson_id,exercise.exercise_id
+        db.add_all([
+            SavedCircuit(learner_id=learner_id,circuit_name="Owned circuit",circuit_definition=circuit_json,expression="Y = NOT A"),
+            Progress(learner_id=learner_id,lesson_id=lesson.lesson_id),
+            ExerciseAttempt(exercise_id=exercise.exercise_id,learner_id=learner_id,submitted_answer={"Y":1},is_correct=True,score=Decimal("100")),
+        ])
+        db.commit()
+    assert mysql_client.delete(f"/api/admin/learners/{learner_id}",headers=admin_headers).status_code==204
+    with SessionLocal() as db:
+        assert db.get(User,learner_id) is None
+        assert db.query(SavedCircuit).filter_by(learner_id=learner_id).count()==0
+        assert db.query(Progress).filter_by(learner_id=learner_id).count()==0
+        assert db.query(ExerciseAttempt).filter_by(learner_id=learner_id).count()==0
+        assert db.query(User).filter(User.email.like("deleted-%@deleted.invalid")).count()==0
+        db.delete(db.get(Exercise,exercise_id)); db.delete(db.get(Lesson,lesson_id)); db.delete(db.get(LogicGate,gate_id)); db.commit()
+
+def test_shared_content_blocks_delete_and_rolls_back_owned_data(mysql_client,circuit_json):
+    admin_headers=privileged(UserRole.ADMIN,"rollback-manager@example.com")
+    created=mysql_client.post("/api/admin/learners",headers=admin_headers,json={"full_name":"Content Owner","email":"content-owner@example.com","password":"Secure123!"})
+    learner_id=created.json()["user_id"]
+    with SessionLocal() as db:
+        db.add(SavedCircuit(learner_id=learner_id,circuit_name="Keep on failure",circuit_definition=circuit_json,expression="Y = NOT A"))
+        db.add(PrebuiltCircuit(title="Shared content",description="shared",difficulty="BEGINNER",circuit_definition=circuit_json,expression="Y = NOT A",created_by=learner_id,is_published=True))
+        db.commit()
+    blocked=mysql_client.delete(f"/api/admin/learners/{learner_id}",headers=admin_headers)
+    assert blocked.status_code==409
+    with SessionLocal() as db:
+        assert db.get(User,learner_id) is not None
+        assert db.query(SavedCircuit).filter_by(learner_id=learner_id).count()==1
+        assert db.query(PrebuiltCircuit).filter_by(created_by=learner_id).count()==1

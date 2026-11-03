@@ -60,9 +60,7 @@ def test_profile_delete_requires_confirmation_and_removes_user(mysql_client):
     assert deleted.status_code==204
 
     with SessionLocal() as db:
-        deleted_user=db.query(User).filter(User.email.like("deleted-%@deleted.invalid")).first()
-        assert deleted_user is not None
-        assert deleted_user.is_active is False
-        assert deleted_user.gender is None and deleted_user.date_of_birth is None
+        assert db.query(User).filter(User.email=="delete-profile@example.com").first() is None
+        assert db.query(User).filter(User.email.like("deleted-%@deleted.invalid")).count()==0
 
     assert mysql_client.post("/api/auth/login",json={"email":"delete-profile@example.com","password":"Secure123!"}).status_code==401

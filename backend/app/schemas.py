@@ -49,6 +49,7 @@ class AdminRegistrationPending(BaseModel):
     status:Literal["PENDING"]="PENDING"; message:str; user:UserOut
 
 class ManagedUserCreate(BaseModel):
+    model_config=ConfigDict(extra="forbid")
     full_name:str=Field(min_length=2,max_length=120)
     email:EmailStr
     password:str=Field(min_length=8,max_length=128)
@@ -60,11 +61,11 @@ class ManagedUserCreate(BaseModel):
         if v and v>date.today(): raise ValueError("date of birth cannot be in the future")
         return v
 class ManagedUserUpdate(BaseModel):
+    model_config=ConfigDict(extra="forbid")
     full_name:str=Field(min_length=2,max_length=120)
     email:EmailStr
     gender:Gender|None=None
     date_of_birth:date|None=None
-    is_active:bool=True
     @field_validator("date_of_birth")
     @classmethod
     def valid_birth_date(cls,v):

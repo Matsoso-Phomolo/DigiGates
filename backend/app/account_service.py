@@ -1,10 +1,8 @@
-"""Shared, ownership-safe self-service account operations."""
-from uuid import uuid4
+"""Shared, transaction-safe account lifecycle operations."""
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
-from .models import User, UserRole
-from .security import hash_password
+from .models import AdminApproval, ExerciseAttempt, PrebuiltCircuit, Progress, SavedCircuit, User, UserRole
 
 def update_own_profile(db:Session,user:User,data):
     email=str(data.email).lower()
@@ -19,10 +17,17 @@ def ensure_super_admin_succession(db:Session,user:User):
     if active<=1:
         raise HTTPException(409,"The last active Super Admin cannot deactivate or delete their account. Provision and verify a successor first.")
 
-def anonymize_and_revoke(db:Session,user:User):
+def permanently_delete_user(db:Session,user:User):
+    """Delete one account and its user-owned records without touching shared content.
+
+    The caller owns the transaction and must commit. Any failure therefore rolls the
+    complete operation back through the request-scoped session.
+    """
     ensure_super_admin_succession(db,user)
-    marker=f"deleted-{user.user_id}"
-    user.full_name="Deleted account"; user.email=f"{marker}@deleted.invalid"
-    user.gender=None; user.date_of_birth=None; user.is_active=False
-    user.password_hash=hash_password(uuid4().hex+uuid4().hex)
-    return user
+    if db.scalar(select(PrebuiltCircuit.circuit_id).where(PrebuiltCircuit.created_by==user.user_id).limit(1)):
+        raise HTTPException(409,"Account owns shared Explore circuits. Reassign or remove those circuits before permanent deletion.")
+    db.execute(delete(ExerciseAttempt).where(ExerciseAttempt.learner_id==user.user_id))
+    db.execute(delete(Progress).where(Progress.learner_id==user.user_id))
+    db.execute(delete(SavedCircuit).where(SavedCircuit.learner_id==user.user_id))
+    db.execute(delete(AdminApproval).where(or_(AdminApproval.admin_user_id==user.user_id,AdminApproval.decided_by==user.user_id)))
+    db.delete(user)
