@@ -66,3 +66,43 @@ describe('verified application session navigation',()=>{
     expect(localStorage.getItem('dg_token')).toBeNull();
   });
 });
+
+describe('authentication dialog accessibility',()=>{
+  let container; let root;
+  beforeEach(()=>{container=document.createElement('div');document.body.appendChild(container);root=createRoot(container)});
+  afterEach(()=>{act(()=>root.unmount());container.remove();localStorage.clear();document.body.style.overflow='';vi.restoreAllMocks()});
+
+  async function renderAt(path){await act(async()=>{root.render(<MemoryRouter initialEntries={[path]}><App/></MemoryRouter>);await Promise.resolve()})}
+
+  it('keeps the complete registration form inside a labelled scrollable dialog',async()=>{
+    await renderAt('/signup');
+    const dialog=container.querySelector('[role="dialog"]'),form=dialog.querySelector('form');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.getAttribute('aria-labelledby')).toBe('auth-dialog-title');
+    expect(form.textContent).toContain('Full Name');
+    expect(form.textContent).toContain('Account type');
+    expect(form.textContent).toContain('Email Address');
+    expect(form.textContent).toContain('Password');
+    expect(form.textContent).toContain('Submit Registration');
+    expect(dialog.querySelector('.close').closest('form')).toBeNull();
+    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.activeElement).toBe(form.querySelector('input'));
+  });
+
+  it('applies the same dialog semantics to Sign In',async()=>{
+    await renderAt('/signin');
+    const dialog=container.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    expect(dialog.textContent).toContain('Sign In');
+    expect(dialog.querySelector('input[type="email"]')).not.toBeNull();
+    expect(dialog.querySelector('input[type="password"]')).not.toBeNull();
+  });
+
+  it('closes on Escape and restores background scrolling',async()=>{
+    await renderAt('/signup');
+    expect(document.body.style.overflow).toBe('hidden');
+    await act(async()=>{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await Promise.resolve()});
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.style.overflow).toBe('');
+  });
+});
