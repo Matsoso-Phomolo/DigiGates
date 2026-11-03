@@ -5,7 +5,7 @@ import {MemoryRouter} from 'react-router-dom';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import App from './App.jsx';
 
-const account=role=>({user_id:1,full_name:'Verified User',email:'verified@example.com',role,approval_status:'ACTIVE',gender:null,date_of_birth:null,is_active:true,created_at:'2026-01-01T00:00:00',updated_at:'2026-01-01T00:00:00'});
+const account=(role,approval_status='ACTIVE',is_active=true)=>({user_id:1,full_name:'Verified User',email:'verified@example.com',role,approval_status,gender:null,date_of_birth:null,is_active,created_at:'2026-01-01T00:00:00',updated_at:'2026-01-01T00:00:00'});
 const response=value=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(value)});
 
 describe('verified application session navigation',()=>{
@@ -13,11 +13,43 @@ describe('verified application session navigation',()=>{
   beforeEach(()=>{container=document.createElement('div');document.body.appendChild(container);root=createRoot(container)});
   afterEach(()=>{act(()=>root.unmount());container.remove();localStorage.clear();vi.restoreAllMocks()});
 
-  async function renderWithBackendUser(user,cached=account('SUPER_ADMIN')){
+  async function renderWithBackendUser(user,cached=account('SUPER_ADMIN'),path='/profile'){
     localStorage.setItem('dg_token','test-token');localStorage.setItem('dg_user',JSON.stringify(cached));
     global.fetch=vi.fn(()=>response(user));
-    await act(async()=>{root.render(<MemoryRouter initialEntries={['/profile']}><App/></MemoryRouter>);await new Promise(resolve=>setTimeout(resolve,0))});
+    await act(async()=>{root.render(<MemoryRouter initialEntries={[path]}><App/></MemoryRouter>);await new Promise(resolve=>setTimeout(resolve,0))});
   }
+
+  const coreLinks=()=>Object.fromEntries([...container.querySelectorAll('.workspaceMenu nav a')].map(link=>[link.textContent.trim().toLowerCase(),link.getAttribute('href')]));
+
+  it.each(['LEARNER','ADMIN','SUPER_ADMIN'])('shows complete core navigation for an active %s',async role=>{
+    await renderWithBackendUser(account(role));
+    expect(coreLinks()).toEqual({learn:'/learn',explore:'/explore',build:'/build'});
+    expect(container.querySelector('.profileTrigger')?.getAttribute('href')).toBe('/profile');
+    expect(container.querySelector('.profileTrigger')?.textContent).toContain('Verified User');
+    expect(container.querySelector('.workspaceHead').textContent).not.toContain('Dashboard');
+  });
+
+  it.each(['ADMIN','SUPER_ADMIN'])('allows an active %s to open core learning routes',async role=>{
+    await renderWithBackendUser(account(role),account(role),'/learn');
+    expect(container.textContent).toContain('LEARN • OPERATOR');
+    expect(coreLinks().learn).toBe('/learn');
+  });
+
+  it.each(['PENDING','REJECTED'])('does not expose learning or administrative navigation to a %s Admin',async status=>{
+    await renderWithBackendUser(account('ADMIN',status));
+    expect(coreLinks()).toEqual({});
+    expect(container.querySelector('.roleDashboardLink')).toBeNull();
+  });
+
+  it('provides an accessible collapsible navigation menu',async()=>{
+    await renderWithBackendUser(account('LEARNER'));
+    const toggle=container.querySelector('.workspaceMenuToggle');
+    expect(toggle.getAttribute('aria-controls')).toBe('workspace-navigation');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    await act(async()=>{toggle.dispatchEvent(new MouseEvent('click',{bubbles:true}));await Promise.resolve()});
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('#workspace-navigation').classList.contains('open')).toBe(true);
+  });
 
   it('uses the backend profile rather than editable cached role data',async()=>{
     await renderWithBackendUser(account('LEARNER'));
