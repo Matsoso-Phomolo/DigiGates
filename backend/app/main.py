@@ -2,14 +2,15 @@ from datetime import datetime
 from decimal import Decimal
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .config import settings
 from .database import get_db
-from .models import Exercise, ExerciseAttempt, Lesson, LogicGate, PrebuiltCircuit, Progress, ProgressStatus, SavedCircuit, User, UserRole
-from .schemas import AttemptCreate, AttemptOut, ExerciseCreate, ExerciseOut, ExerciseUpdate, GateCreate, GateOut, GateUpdate, LessonCreate, LessonOut, LessonUpdate, Login, PrebuiltCreate, PrebuiltOut, PrebuiltUpdate, ProgressOut, ProgressUpsert, Register, SavedCircuitCreate, SavedCircuitOut, SavedCircuitUpdate, Token, UserOut, AccountConfirmation, AccountDeleteConfirmation, PasswordChange, ProfileUpdate
-from .security import admin_user, current_user, hash_password, token_for, verify_password
+from .models import AdminApproval, ApprovalStatus, Exercise, ExerciseAttempt, Lesson, LogicGate, PrebuiltCircuit, Progress, ProgressStatus, SavedCircuit, User, UserRole
+from .schemas import AdminRegistrationPending, ApprovalDecision, ApprovalHistoryOut, AttemptCreate, AttemptOut, ExerciseCreate, ExerciseOut, ExerciseUpdate, GateCreate, GateOut, GateUpdate, LessonCreate, LessonOut, LessonUpdate, Login, ManagedUserCreate, ManagedUserUpdate, PrebuiltCreate, PrebuiltOut, PrebuiltUpdate, ProgressOut, ProgressUpsert, Register, SavedCircuitCreate, SavedCircuitOut, SavedCircuitUpdate, Token, UserOut, UserPage, AccountConfirmation, AccountDeleteConfirmation, PasswordChange, ProfileUpdate
+from .account_service import anonymize_and_revoke, ensure_super_admin_succession, update_own_profile
+from .security import admin_user, authenticated_account, current_user, hash_password, super_admin_user, token_for, verify_password
 
 app=FastAPI(title="DigiGates API",version="2.0.0")
 app.add_middleware(CORSMiddleware,allow_origins=[settings.frontend_origin],allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
@@ -27,12 +28,16 @@ def get_or_404(db,model,item_id):
 
 @app.get("/api/health")
 def health(): return {"status":"ok","database":"mysql"}
-@app.post("/api/auth/register",response_model=Token,status_code=201)
+@app.post("/api/auth/register",response_model=Token|AdminRegistrationPending,status_code=201)
 def register(data:Register,db:Session=Depends(get_db)):
     email=str(data.email).lower()
     if db.scalar(select(User).where(User.email==email)): raise HTTPException(409,"Email already registered")
-    user=User(full_name=data.full_name,email=email,password_hash=hash_password(data.password),role=UserRole.LEARNER)
+    role=UserRole.ADMIN if data.requested_role=="ADMIN" else UserRole.LEARNER
+    approval=ApprovalStatus.PENDING if role==UserRole.ADMIN else ApprovalStatus.ACTIVE
+    user=User(full_name=data.full_name,email=email,password_hash=hash_password(data.password),role=role,approval_status=approval)
     db.add(user); commit(db); db.refresh(user)
+    if approval==ApprovalStatus.PENDING:
+        return AdminRegistrationPending(message="Administrator access requires Super Admin approval.",user=user)
     return Token(access_token=token_for(user),user=user)
 @app.post("/api/auth/login",response_model=Token)
 def login(data:Login,db:Session=Depends(get_db)):
@@ -44,22 +49,18 @@ def login(data:Login,db:Session=Depends(get_db)):
 def me(user=Depends(current_user)): return user
 
 @app.get("/api/profile",response_model=UserOut)
-def profile(user=Depends(current_user)):
+def profile(user=Depends(authenticated_account)):
     return user
 
 @app.put("/api/profile",response_model=UserOut)
-def update_profile(data:ProfileUpdate,db:Session=Depends(get_db),user=Depends(current_user)):
-    email=str(data.email).lower()
-    existing=db.scalar(select(User).where(User.email==email,User.user_id!=user.user_id))
-    if existing: raise HTTPException(409,"Email already registered")
-    user.full_name=data.full_name
-    user.email=email
+def update_profile(data:ProfileUpdate,db:Session=Depends(get_db),user=Depends(authenticated_account)):
+    update_own_profile(db,user,data)
     commit(db)
     db.refresh(user)
     return user
 
 @app.put("/api/profile/password",status_code=204)
-def change_password(data:PasswordChange,db:Session=Depends(get_db),user=Depends(current_user)):
+def change_password(data:PasswordChange,db:Session=Depends(get_db),user=Depends(authenticated_account)):
     if not verify_password(data.current_password,user.password_hash): raise HTTPException(401,"Current password is incorrect")
     if verify_password(data.new_password,user.password_hash): raise HTTPException(400,"New password must be different from current password")
     user.password_hash=hash_password(data.new_password)
@@ -67,21 +68,17 @@ def change_password(data:PasswordChange,db:Session=Depends(get_db),user=Depends(
     return Response(status_code=204)
 
 @app.post("/api/profile/deactivate",status_code=204)
-def deactivate_account(data:AccountConfirmation,db:Session=Depends(get_db),user=Depends(current_user)):
-    if user.role!=UserRole.LEARNER: raise HTTPException(403,"Learner account required")
+def deactivate_account(data:AccountConfirmation,db:Session=Depends(get_db),user=Depends(authenticated_account)):
     if not verify_password(data.current_password,user.password_hash): raise HTTPException(401,"Current password is incorrect")
+    ensure_super_admin_succession(db,user)
     user.is_active=False
     commit(db)
     return Response(status_code=204)
 
 @app.delete("/api/profile",status_code=204)
-def delete_account(data:AccountDeleteConfirmation,db:Session=Depends(get_db),user=Depends(current_user)):
-    if user.role!=UserRole.LEARNER: raise HTTPException(403,"Learner account required")
+def delete_account(data:AccountDeleteConfirmation,db:Session=Depends(get_db),user=Depends(authenticated_account)):
     if not verify_password(data.current_password,user.password_hash): raise HTTPException(401,"Current password is incorrect")
-    db.execute(delete(ExerciseAttempt).where(ExerciseAttempt.learner_id==user.user_id))
-    db.execute(delete(Progress).where(Progress.learner_id==user.user_id))
-    db.execute(delete(SavedCircuit).where(SavedCircuit.learner_id==user.user_id))
-    db.delete(user)
+    anonymize_and_revoke(db,user)
     commit(db)
     return Response(status_code=204)
 
@@ -94,6 +91,70 @@ ADMIN_RESOURCES={
 def resource_spec(name):
     if name not in ADMIN_RESOURCES: raise HTTPException(404,"Unknown resource")
     return ADMIN_RESOURCES[name]
+def user_page(db,role,page,page_size,q):
+    filters=[User.role==role]
+    if q:
+        term=f"%{q.strip()}%"; filters.append(or_(User.full_name.like(term),User.email.like(term)))
+    total=db.scalar(select(func.count()).select_from(User).where(*filters)) or 0
+    items=db.scalars(select(User).where(*filters).order_by(User.full_name).offset((page-1)*page_size).limit(page_size)).all()
+    return UserPage(items=items,page=page,page_size=page_size,total=total,pages=max(1,(total+page_size-1)//page_size))
+def managed_user(db,item_id,role):
+    item=db.scalar(select(User).where(User.user_id==item_id,User.role==role))
+    if not item: raise HTTPException(404,"Account not found")
+    return item
+def apply_user_fields(db,user,data):
+    email=str(data.email).lower()
+    if db.scalar(select(User).where(User.email==email,User.user_id!=user.user_id)): raise HTTPException(409,"Email already registered")
+    for key,value in data.model_dump(exclude={"password"}).items(): setattr(user,key,email if key=="email" else value)
+
+@app.get("/api/admin/learners",response_model=UserPage)
+def learners(page:int=1,page_size:int=20,q:str|None=None,db:Session=Depends(get_db),_=Depends(admin_user)):
+    if page<1 or not 1<=page_size<=100: raise HTTPException(422,"Invalid pagination")
+    return user_page(db,UserRole.LEARNER,page,page_size,q)
+@app.get("/api/admin/learners/{item_id}",response_model=UserOut)
+def learner(item_id:int,db:Session=Depends(get_db),_=Depends(admin_user)): return managed_user(db,item_id,UserRole.LEARNER)
+@app.post("/api/admin/learners",response_model=UserOut,status_code=201)
+def create_learner(data:ManagedUserCreate,db:Session=Depends(get_db),_=Depends(admin_user)):
+    user=User(full_name=data.full_name,email=str(data.email).lower(),password_hash=hash_password(data.password),gender=data.gender,date_of_birth=data.date_of_birth,role=UserRole.LEARNER,approval_status=ApprovalStatus.ACTIVE)
+    db.add(user); commit(db); db.refresh(user); return user
+@app.put("/api/admin/learners/{item_id}",response_model=UserOut)
+def update_learner(item_id:int,data:ManagedUserUpdate,db:Session=Depends(get_db),_=Depends(admin_user)):
+    user=managed_user(db,item_id,UserRole.LEARNER); apply_user_fields(db,user,data); commit(db); db.refresh(user); return user
+@app.delete("/api/admin/learners/{item_id}",status_code=204)
+def delete_learner(item_id:int,db:Session=Depends(get_db),_=Depends(admin_user)):
+    user=managed_user(db,item_id,UserRole.LEARNER); user.is_active=False; commit(db); return Response(status_code=204)
+
+@app.get("/api/super-admin/admins",response_model=UserPage)
+def admins(page:int=1,page_size:int=20,q:str|None=None,db:Session=Depends(get_db),_=Depends(super_admin_user)):
+    if page<1 or not 1<=page_size<=100: raise HTTPException(422,"Invalid pagination")
+    return user_page(db,UserRole.ADMIN,page,page_size,q)
+@app.get("/api/super-admin/admins/{item_id}",response_model=UserOut)
+def admin_account(item_id:int,db:Session=Depends(get_db),_=Depends(super_admin_user)): return managed_user(db,item_id,UserRole.ADMIN)
+@app.post("/api/super-admin/admins",response_model=UserOut,status_code=201)
+def create_admin(data:ManagedUserCreate,db:Session=Depends(get_db),_=Depends(super_admin_user)):
+    user=User(full_name=data.full_name,email=str(data.email).lower(),password_hash=hash_password(data.password),gender=data.gender,date_of_birth=data.date_of_birth,role=UserRole.ADMIN,approval_status=ApprovalStatus.ACTIVE)
+    db.add(user); commit(db); db.refresh(user); return user
+@app.put("/api/super-admin/admins/{item_id}",response_model=UserOut)
+def update_admin(item_id:int,data:ManagedUserUpdate,db:Session=Depends(get_db),_=Depends(super_admin_user)):
+    user=managed_user(db,item_id,UserRole.ADMIN); apply_user_fields(db,user,data); commit(db); db.refresh(user); return user
+@app.delete("/api/super-admin/admins/{item_id}",status_code=204)
+def delete_admin(item_id:int,db:Session=Depends(get_db),_=Depends(super_admin_user)):
+    user=managed_user(db,item_id,UserRole.ADMIN); user.is_active=False; commit(db); return Response(status_code=204)
+@app.get("/api/super-admin/admin-requests",response_model=list[UserOut])
+def pending_admins(db:Session=Depends(get_db),_=Depends(super_admin_user)):
+    return db.scalars(select(User).where(User.role==UserRole.ADMIN,User.approval_status==ApprovalStatus.PENDING).order_by(User.created_at)).all()
+@app.post("/api/super-admin/admin-requests/{item_id}/decision",response_model=UserOut)
+def decide_admin(item_id:int,data:ApprovalDecision,db:Session=Depends(get_db),super_admin=Depends(super_admin_user)):
+    user=db.scalar(select(User).where(User.user_id==item_id,User.role==UserRole.ADMIN).with_for_update())
+    if not user: raise HTTPException(404,"Administrator request not found")
+    if user.approval_status!=ApprovalStatus.PENDING: raise HTTPException(409,"Administrator request has already been decided")
+    result=ApprovalStatus.ACTIVE if data.decision=="APPROVE" else ApprovalStatus.REJECTED
+    user.approval_status=result
+    db.add(AdminApproval(admin_user_id=user.user_id,status=result,decided_by=super_admin.user_id,decision_note=data.note))
+    commit(db); db.refresh(user); return user
+@app.get("/api/super-admin/approval-history",response_model=list[ApprovalHistoryOut])
+def approval_history(db:Session=Depends(get_db),_=Depends(super_admin_user)):
+    return db.scalars(select(AdminApproval).order_by(AdminApproval.decided_at.desc())).all()
 @app.get("/api/admin/{resource}")
 def admin_list(resource:str,db:Session=Depends(get_db),_=Depends(admin_user)):
     model,*_=resource_spec(resource); return db.scalars(select(model)).all()

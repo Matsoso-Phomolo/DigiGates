@@ -1,11 +1,14 @@
 import enum
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
-class UserRole(str, enum.Enum): LEARNER="LEARNER"; ADMIN="ADMIN"
+class UserRole(str, enum.Enum): LEARNER="LEARNER"; ADMIN="ADMIN"; SUPER_ADMIN="SUPER_ADMIN"
+class ApprovalStatus(str, enum.Enum): ACTIVE="ACTIVE"; PENDING="PENDING"; REJECTED="REJECTED"
+class Gender(str, enum.Enum):
+    MALE="MALE"; FEMALE="FEMALE"; NON_BINARY="NON_BINARY"; PREFER_NOT_TO_SAY="PREFER_NOT_TO_SAY"
 class ProgressStatus(str, enum.Enum): NOT_STARTED="NOT_STARTED"; IN_PROGRESS="IN_PROGRESS"; COMPLETED="COMPLETED"
 class TimestampMixin:
     created_at: Mapped[datetime]=mapped_column(DateTime, nullable=False, server_default=func.now())
@@ -18,11 +21,27 @@ class User(TimestampMixin, Base):
     email: Mapped[str]=mapped_column(String(255), nullable=False, unique=True, index=True)
     password_hash: Mapped[str]=mapped_column(String(255), nullable=False)
     role: Mapped[UserRole]=mapped_column(Enum(UserRole), nullable=False, default=UserRole.LEARNER)
+    approval_status: Mapped[ApprovalStatus]=mapped_column(Enum(ApprovalStatus), nullable=False, default=ApprovalStatus.ACTIVE, server_default="ACTIVE")
+    gender: Mapped[Gender|None]=mapped_column(Enum(Gender), nullable=True)
+    date_of_birth: Mapped[date|None]=mapped_column(nullable=True)
     is_active: Mapped[bool]=mapped_column(Boolean, nullable=False, default=True, server_default="1")
     saved_circuits=relationship("SavedCircuit", back_populates="learner")
     progress_entries=relationship("Progress", back_populates="learner")
     attempts=relationship("ExerciseAttempt", back_populates="learner")
     created_circuits=relationship("PrebuiltCircuit", back_populates="creator")
+    approval_decisions=relationship("AdminApproval", foreign_keys="AdminApproval.admin_user_id", back_populates="admin_user")
+    approvals_made=relationship("AdminApproval", foreign_keys="AdminApproval.decided_by", back_populates="decider")
+
+class AdminApproval(Base):
+    __tablename__="admin_approvals"
+    approval_id: Mapped[int]=mapped_column(Integer, primary_key=True)
+    admin_user_id: Mapped[int]=mapped_column(ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False, index=True)
+    status: Mapped[ApprovalStatus]=mapped_column(Enum(ApprovalStatus), nullable=False)
+    decided_by: Mapped[int]=mapped_column(ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False, index=True)
+    decision_note: Mapped[str|None]=mapped_column(String(500), nullable=True)
+    decided_at: Mapped[datetime]=mapped_column(DateTime, nullable=False, server_default=func.now())
+    admin_user=relationship("User", foreign_keys=[admin_user_id], back_populates="approval_decisions")
+    decider=relationship("User", foreign_keys=[decided_by], back_populates="approvals_made")
 
 class LogicGate(TimestampMixin, Base):
     __tablename__="logic_gates"

@@ -1,15 +1,16 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
-from .models import ProgressStatus, UserRole
+from .models import ApprovalStatus, Gender, ProgressStatus, UserRole
 
 class ORMModel(BaseModel): model_config=ConfigDict(from_attributes=True)
 class Register(BaseModel):
     full_name: str=Field(min_length=2,max_length=120)
     email: EmailStr
     password: str=Field(min_length=8,max_length=128)
+    requested_role: Literal["LEARNER","ADMIN"]="LEARNER"
     @field_validator("full_name")
     @classmethod
     def clean_name(cls,v):
@@ -17,15 +18,22 @@ class Register(BaseModel):
         return v.strip()
 class Login(BaseModel): email: EmailStr; password: str
 class UserOut(ORMModel):
-    user_id:int; full_name:str; email:EmailStr; role:UserRole; is_active:bool; created_at:datetime; updated_at:datetime
+    user_id:int; full_name:str; email:EmailStr; role:UserRole; approval_status:ApprovalStatus; gender:Gender|None; date_of_birth:date|None; is_active:bool; created_at:datetime; updated_at:datetime
 class ProfileUpdate(BaseModel):
     full_name: str=Field(min_length=2,max_length=120)
     email: EmailStr
+    gender: Gender|None=None
+    date_of_birth: date|None=None
     @field_validator("full_name")
     @classmethod
     def clean_name(cls,v):
         if not v.strip(): raise ValueError("name cannot be blank")
         return v.strip()
+    @field_validator("date_of_birth")
+    @classmethod
+    def valid_birth_date(cls,v):
+        if v and v>date.today(): raise ValueError("date of birth cannot be in the future")
+        return v
 class PasswordChange(BaseModel):
     current_password: str=Field(min_length=1,max_length=128)
     new_password: str=Field(min_length=8,max_length=128)
@@ -35,6 +43,38 @@ class AccountDeleteConfirmation(AccountConfirmation):
     confirmation: Literal["DELETE"]
 
 class Token(BaseModel): access_token:str; token_type:str="bearer"; user:UserOut
+class AdminRegistrationPending(BaseModel):
+    status:Literal["PENDING"]="PENDING"; message:str; user:UserOut
+
+class ManagedUserCreate(BaseModel):
+    full_name:str=Field(min_length=2,max_length=120)
+    email:EmailStr
+    password:str=Field(min_length=8,max_length=128)
+    gender:Gender|None=None
+    date_of_birth:date|None=None
+    @field_validator("date_of_birth")
+    @classmethod
+    def valid_birth_date(cls,v):
+        if v and v>date.today(): raise ValueError("date of birth cannot be in the future")
+        return v
+class ManagedUserUpdate(BaseModel):
+    full_name:str=Field(min_length=2,max_length=120)
+    email:EmailStr
+    gender:Gender|None=None
+    date_of_birth:date|None=None
+    is_active:bool=True
+    @field_validator("date_of_birth")
+    @classmethod
+    def valid_birth_date(cls,v):
+        if v and v>date.today(): raise ValueError("date of birth cannot be in the future")
+        return v
+class UserPage(BaseModel):
+    items:list[UserOut]; page:int; page_size:int; total:int; pages:int
+class ApprovalDecision(BaseModel):
+    decision:Literal["APPROVE","REJECT"]
+    note:str|None=Field(default=None,max_length=500)
+class ApprovalHistoryOut(ORMModel):
+    approval_id:int; admin_user_id:int; status:ApprovalStatus; decided_by:int; decision_note:str|None; decided_at:datetime
 
 GATE_TYPES={"BUFFER":1,"NOT":1,"AND":2,"OR":2,"NAND":2,"NOR":2,"XOR":2,"XNOR":2}
 class SourceType(str,Enum): variable="variable"; operator="operator"

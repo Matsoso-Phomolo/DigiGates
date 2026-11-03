@@ -597,6 +597,26 @@ Never paste database passwords into GitHub issues, commits, screenshots, or publ
 - Treat shared Aiven database data as persistent team data.
 - Review `.gitignore` before committing new environment or certificate files.
 
+## Account roles and profile migration
+
+Migration `20261102_0002` adds optional `gender` and `date_of_birth`, `LEARNER`, `ADMIN`, and `SUPER_ADMIN` roles, approval status, and immutable administrator decision history. Migration `20261102_0003` safely removes the short-lived username column and index. Apply them only after confirming the target database identity and backup policy:
+
+```bash
+cd backend
+alembic current
+alembic upgrade head
+```
+
+Existing `LEARNER` and `ADMIN` accounts remain active. New public Admin registrations remain `PENDING`: they may authenticate for self-service profile CRUD, but every learning or administrative permission remains denied until a Super Admin approves the request.
+
+Provision the initial Super Admin only from a trusted backend shell, using the email of an existing verified account selected by the project owner:
+
+```bash
+python -m app.provision_super_admin --email owner@example.com --confirm
+```
+
+This command never creates or embeds credentials. Every role has ownership-checked self-service profile CRUD. Self-deletion reauthenticates, revokes access, and removes unnecessary profile PII while preserving referential and approval history. The last active Super Admin must provision and verify a successor before deactivation or deletion.
+
 ---
 
 # DigiGates
