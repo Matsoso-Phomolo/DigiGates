@@ -129,3 +129,66 @@ describe('authentication dialog accessibility',()=>{
     expect(document.body.style.overflow).toBe('');
   });
 });
+
+describe('persisted global theme control',()=>{
+  let container; let root;
+  beforeEach(()=>{globalThis.IS_REACT_ACT_ENVIRONMENT=true;container=document.createElement('div');document.body.appendChild(container);root=createRoot(container)});
+  afterEach(()=>{act(()=>root.unmount());container.remove();localStorage.clear();delete document.documentElement.dataset.theme;document.documentElement.style.colorScheme='';vi.restoreAllMocks()});
+  const click=element=>act(async()=>{element.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));await Promise.resolve()});
+  async function renderAt(path,user=null){
+    if(user){localStorage.setItem('dg_token','test-token');global.fetch=vi.fn(url=>String(url).endsWith('/profile')?response(user):response(String(url).includes('admin-requests')?[]:emptyPage))}
+    await act(async()=>{root.render(<MemoryRouter initialEntries={[path]}><App/></MemoryRouter>);await new Promise(resolve=>setTimeout(resolve,0))});
+  }
+
+  it('switches dark to light and back with the correct action icon and accessible label',async()=>{
+    await renderAt('/');
+    let toggle=container.querySelector('.themeToggle');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(toggle.getAttribute('aria-label')).toBe('Switch to light theme');
+    expect(toggle.querySelector('.lucide-sun')).not.toBeNull();
+    toggle.focus();
+    expect(document.activeElement).toBe(toggle);
+    await click(toggle);
+    toggle=container.querySelector('.themeToggle');
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('dg_theme')).toBe('light');
+    expect(toggle.getAttribute('aria-label')).toBe('Switch to dark theme');
+    expect(toggle.querySelector('.lucide-moon')).not.toBeNull();
+    await click(toggle);
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(localStorage.getItem('dg_theme')).toBe('dark');
+  });
+
+  it('restores the saved theme on refresh-equivalent render and applies it to authentication dialogs',async()=>{
+    localStorage.setItem('dg_theme','light');
+    await renderAt('/signup');
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(container.querySelector('.themeToggle').getAttribute('aria-label')).toBe('Switch to dark theme');
+  });
+
+  it.each([
+    ['LEARNER','ACTIVE','/learn'],
+    ['ADMIN','ACTIVE','/admin?section=learners'],
+    ['SUPER_ADMIN','ACTIVE','/super-admin?section=requests'],
+    ['ADMIN','PENDING','/profile'],
+    ['ADMIN','REJECTED','/profile'],
+  ])('is available independently of %s/%s authorization',async(role,status,path)=>{
+    await renderAt(path,account(role,status));
+    const toggle=container.querySelector('.themeToggle');
+    expect(toggle).not.toBeNull();
+    await click(toggle);
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('dg_theme')).toBe('light');
+  });
+
+  it('keeps the preference after logout while privileged navigation is removed',async()=>{
+    localStorage.setItem('dg_theme','light');
+    await renderAt('/profile',account('SUPER_ADMIN'));
+    expect(document.documentElement.dataset.theme).toBe('light');
+    await click(container.querySelector('button[title="Sign out"]'));
+    expect(localStorage.getItem('dg_theme')).toBe('light');
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(container.querySelector('.roleDashboardLink')).toBeNull();
+  });
+});
