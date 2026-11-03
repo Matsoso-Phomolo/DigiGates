@@ -51,3 +51,14 @@ def test_role_scoped_account_crud_and_profile_persistence(mysql_client):
     assert mysql_client.put(f"/api/super-admin/admins/{admin_id}",headers=super_headers,json={"full_name":"Updated Admin","email":"managed-admin@example.com","gender":"NON_BINARY","date_of_birth":"1990-04-05","is_active":True}).status_code==200
     assert mysql_client.delete(f"/api/super-admin/admins/{admin_id}",headers=super_headers).status_code==204
     assert mysql_client.get("/api/super-admin/admins",headers=admin_headers).status_code==403
+
+def test_management_list_serializes_anonymized_self_deleted_account(mysql_client):
+    admin_headers=privileged(UserRole.ADMIN,"deleted-list-manager@example.com")
+    registration=mysql_client.post("/api/auth/register",json={"full_name":"Disposable Learner","email":"disposable-list@example.com","password":"Secure123!","requested_role":"LEARNER"})
+    learner_headers={"Authorization":"Bearer "+registration.json()["access_token"]}
+    deleted=mysql_client.request("DELETE","/api/profile",headers=learner_headers,json={"current_password":"Secure123!","confirmation":"DELETE"})
+    assert deleted.status_code==204
+    listing=mysql_client.get("/api/admin/learners?q=deleted-",headers=admin_headers)
+    assert listing.status_code==200
+    assert listing.json()["total"]==1
+    assert listing.json()["items"][0]["email"].endswith("@deleted.invalid")

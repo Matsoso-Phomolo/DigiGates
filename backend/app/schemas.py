@@ -18,7 +18,9 @@ class Register(BaseModel):
         return v.strip()
 class Login(BaseModel): email: EmailStr; password: str
 class UserOut(ORMModel):
-    user_id:int; full_name:str; email:EmailStr; role:UserRole; approval_status:ApprovalStatus; gender:Gender|None; date_of_birth:date|None; is_active:bool; created_at:datetime; updated_at:datetime
+    # Inputs remain EmailStr-validated. Outputs also include deliberately
+    # anonymized, non-deliverable addresses for deleted accounts.
+    user_id:int; full_name:str; email:str; role:UserRole; approval_status:ApprovalStatus; gender:Gender|None; date_of_birth:date|None; is_active:bool; created_at:datetime; updated_at:datetime
 class ProfileUpdate(BaseModel):
     full_name: str=Field(min_length=2,max_length=120)
     email: EmailStr
