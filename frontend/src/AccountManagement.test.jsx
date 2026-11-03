@@ -19,17 +19,19 @@ describe('Super Admin account lists',()=>{
 
   it('fetches the correct list whenever the role tab changes',async()=>{
     global.fetch=vi.fn((url)=>ok(url.includes('admin-requests')?[]:page));
-    await act(async()=>{root.render(<SuperAdminPortal/>);await Promise.resolve()});
+    await act(async()=>{root.render(<MemoryRouter initialEntries={['/super-admin?section=requests']}><SuperAdminPortal/></MemoryRouter>);await Promise.resolve()});
     const button=label=>[...container.querySelectorAll('button')].find(x=>x.textContent===label);
     await click(button('Learners'));
+    expect(container.querySelector('.side button.active')?.textContent).toBe('Learners');
     await click(button('Administrators'));
+    expect(container.querySelector('.side button.active')?.textContent).toBe('Administrators');
     expect(fetch.mock.calls.some(([url])=>url.includes('/admin/learners?page=1&page_size=10&q='))).toBe(true);
     expect(fetch.mock.calls.some(([url])=>url.includes('/super-admin/admins?page=1&page_size=10&q='))).toBe(true);
   });
 
   it('does not describe a failed request as an empty account list',async()=>{
     global.fetch=vi.fn((url)=>url.includes('admin-requests')?ok([]):Promise.reject(new TypeError('Failed to fetch')));
-    await act(async()=>{root.render(<SuperAdminPortal/>);await Promise.resolve()});
+    await act(async()=>{root.render(<MemoryRouter initialEntries={['/super-admin?section=requests']}><SuperAdminPortal/></MemoryRouter>);await Promise.resolve()});
     const learners=[...container.querySelectorAll('button')].find(x=>x.textContent==='Learners');
     await click(learners);
     expect(container.textContent).toContain('Failed to fetch');
@@ -48,13 +50,13 @@ describe('Profile role navigation',()=>{
   it('links an active Super Admin to the Super Admin dashboard',async()=>{
     await renderProfile(account('SUPER_ADMIN'));
     const link=[...container.querySelectorAll('a')].find(x=>x.textContent.includes('Super Admin Dashboard'));
-    expect(link?.getAttribute('href')).toBe('/super-admin');
+    expect(link?.getAttribute('href')).toBe('/super-admin?section=requests');
   });
 
   it('links an approved active Admin to the Admin dashboard',async()=>{
     await renderProfile(account('ADMIN'));
     const link=[...container.querySelectorAll('a')].find(x=>x.textContent.includes('Admin Dashboard'));
-    expect(link?.getAttribute('href')).toBe('/admin');
+    expect(link?.getAttribute('href')).toBe('/admin?section=learners');
   });
 
   it.each([['LEARNER','ACTIVE'],['ADMIN','PENDING'],['ADMIN','REJECTED']])('hides administrative navigation for %s/%s',async(role,status)=>{

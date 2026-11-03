@@ -11,7 +11,7 @@ const emptyPage={items:[],page:1,page_size:10,total:0,pages:1};
 
 describe('verified application session navigation',()=>{
   let container; let root;
-  beforeEach(()=>{container=document.createElement('div');document.body.appendChild(container);root=createRoot(container)});
+  beforeEach(()=>{globalThis.IS_REACT_ACT_ENVIRONMENT=true;container=document.createElement('div');document.body.appendChild(container);root=createRoot(container)});
   afterEach(()=>{act(()=>root.unmount());container.remove();localStorage.clear();vi.restoreAllMocks()});
 
   async function renderWithBackendUser(user,cached=account('SUPER_ADMIN'),path='/profile'){
@@ -30,15 +30,26 @@ describe('verified application session navigation',()=>{
   });
 
   it('shows only role-appropriate navigation for an approved Admin',async()=>{
-    await renderWithBackendUser(account('ADMIN'));
-    expect(coreLinks()).toEqual({'admin dashboard':'/admin'});
+    await renderWithBackendUser(account('ADMIN'),account('ADMIN'),'/admin?section=learners');
+    expect(coreLinks()).toEqual({learners:'/admin?section=learners'});
+    expect(container.querySelector('.workspaceMenu nav a.active')?.textContent).toContain('Learners');
+    expect(container.querySelector('.side button.active')?.textContent).toBe('Learners');
     expect(container.querySelector('.workspaceActions').children).toHaveLength(4);
   });
 
-  it('shows only role-appropriate navigation for an active Super Admin',async()=>{
-    await renderWithBackendUser(account('SUPER_ADMIN'));
-    expect(coreLinks()).toEqual({'super admin dashboard':'/super-admin'});
+  it('shows all three role-appropriate destinations for an active Super Admin',async()=>{
+    await renderWithBackendUser(account('SUPER_ADMIN'),account('SUPER_ADMIN'),'/super-admin?section=requests');
+    expect(coreLinks()).toEqual({'admin requests':'/super-admin?section=requests',learners:'/super-admin?section=learners',administrators:'/super-admin?section=admins'});
+    expect(container.querySelector('.workspaceMenu nav a.active')?.textContent).toContain('Admin Requests');
+    expect(container.querySelector('.side button.active')?.textContent).toBe('Admin Requests');
     expect(container.querySelector('.workspaceActions').children).toHaveLength(4);
+  });
+
+  it('marks the current Super Admin section active in both header and sidebar',async()=>{
+    await renderWithBackendUser(account('SUPER_ADMIN'),account('SUPER_ADMIN'),'/super-admin?section=requests');
+    expect(container.querySelector('.workspaceMenu nav a.active')?.textContent).toContain('Admin Requests');
+    expect(container.querySelector('.workspaceMenu nav a.active')?.getAttribute('aria-current')).toBe('page');
+    expect(container.querySelector('.side button.active')?.textContent).toBe('Admin Requests');
   });
 
   it.each(['ADMIN','SUPER_ADMIN'])('does not grant %s access to Learner routes',async role=>{
@@ -71,7 +82,7 @@ describe('verified application session navigation',()=>{
 
   it('removes privileged navigation when the verified user logs out',async()=>{
     await renderWithBackendUser(account('SUPER_ADMIN'));
-    expect(container.querySelector('.roleDashboardLink')?.getAttribute('href')).toBe('/super-admin');
+    expect(container.querySelector('.roleDashboardLink')?.getAttribute('href')).toBe('/super-admin?section=requests');
     const logout=container.querySelector('button[title="Sign out"]');
     await act(async()=>{logout.dispatchEvent(new MouseEvent('click',{bubbles:true}));await Promise.resolve()});
     expect(container.querySelector('.roleDashboardLink')).toBeNull();
