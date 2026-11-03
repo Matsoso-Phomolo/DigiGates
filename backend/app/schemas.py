@@ -11,11 +11,18 @@ class Register(BaseModel):
     email: EmailStr
     password: str=Field(min_length=8,max_length=128)
     requested_role: Literal["LEARNER","ADMIN"]="LEARNER"
+    gender: Gender|None=None
+    date_of_birth: date|None=None
     @field_validator("full_name")
     @classmethod
     def clean_name(cls,v):
         if not v.strip(): raise ValueError("name cannot be blank")
         return v.strip()
+    @field_validator("date_of_birth")
+    @classmethod
+    def valid_birth_date(cls,v):
+        if v and v>date.today(): raise ValueError("date of birth cannot be in the future")
+        return v
 class Login(BaseModel): email: EmailStr; password: str
 class UserOut(ORMModel):
     # Inputs remain EmailStr-validated. Outputs also include deliberately

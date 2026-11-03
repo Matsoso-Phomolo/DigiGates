@@ -43,12 +43,12 @@ describe('Super Admin account lists',()=>{
 
 describe('Administrator learner lifecycle actions',()=>{
   let container; let root;
-  const learner=(id,name,email,is_active)=>({user_id:id,full_name:name,email,role:'LEARNER',approval_status:'ACTIVE',gender:null,date_of_birth:null,is_active,created_at:'2026-01-01T00:00:00',updated_at:'2026-01-01T00:00:00'});
+  const learner=(id,name,email,is_active,date_of_birth=null)=>({user_id:id,full_name:name,email,role:'LEARNER',approval_status:'ACTIVE',gender:null,date_of_birth,is_active,created_at:'2026-01-01T00:00:00',updated_at:'2026-01-01T00:00:00'});
   beforeEach(()=>{globalThis.IS_REACT_ACT_ENVIRONMENT=true;localStorage.setItem('dg_token','test-token');container=document.createElement('div');document.body.appendChild(container);root=createRoot(container);vi.spyOn(window,'confirm').mockReturnValue(true)});
   afterEach(()=>{act(()=>root.unmount());container.remove();localStorage.clear();vi.restoreAllMocks()});
 
   it('shows state-appropriate actions, refreshes, and requires DELETE confirmation',async()=>{
-    let items=[learner(10,'Active Learner','active@example.com',true),learner(11,'Inactive Learner','inactive@example.com',false)];
+    let items=[learner(10,'Active Learner','active@example.com',true),learner(11,'Inactive Learner','inactive@example.com',false,'2001-02-03')];
     global.fetch=vi.fn((url,options={})=>{
       const path=String(url),method=options.method||'GET';
       if(method==='POST'&&path.endsWith('/10/deactivate')){items=items.map(x=>x.user_id===10?{...x,is_active:false}:x);return noContent()}
@@ -67,6 +67,8 @@ describe('Administrator learner lifecycle actions',()=>{
 
     await click([...row('inactive@example.com').querySelectorAll('button')].find(x=>x.textContent==='Edit'));
     expect(container.querySelector('.managedForm input[type="email"]').value).toBe('inactive@example.com');
+    expect(container.querySelector('.managedForm input[placeholder="YYYY-MM-DD"]').value).toBe('2001-02-03');
+    expect(row('inactive@example.com').textContent).toContain('2001-02-03');
     await click([...container.querySelectorAll('.managedForm button')].find(x=>x.textContent==='Cancel'));
 
     await click([...row('active@example.com').querySelectorAll('button')].find(x=>x.textContent==='Deactivate'));
@@ -91,7 +93,7 @@ describe('Administrator learner lifecycle actions',()=>{
 
 describe('Profile role content',()=>{
   let container; let root;
-  const account=(role,approval_status='ACTIVE')=>({user_id:1,full_name:'Role User',email:'role@example.com',role,approval_status,gender:null,date_of_birth:null,is_active:true});
+  const account=(role,approval_status='ACTIVE')=>({user_id:1,full_name:'Role User',email:'role@example.com',role,approval_status,gender:null,date_of_birth:'1995-06-01',is_active:true});
   const renderProfile=user=>act(async()=>{root.render(<MemoryRouter><ProfileV2 user={user} onUserChange={()=>{}} logout={()=>{}}/></MemoryRouter>);await Promise.resolve()});
   beforeEach(()=>{container=document.createElement('div');document.body.appendChild(container);root=createRoot(container)});
   afterEach(()=>{act(()=>root.unmount());container.remove()});
@@ -104,6 +106,8 @@ describe('Profile role content',()=>{
     expect(container.querySelector('.roleDashboardCallout')).toBeNull();
     expect(container.textContent).toContain('Personal Information');
     expect(container.textContent).toContain('Saved Profile');
+    expect(container.textContent).toContain('1995-06-01');
+    expect(container.querySelector('input[placeholder="YYYY-MM-DD"]').value).toBe('1995-06-01');
     expect(container.textContent).toContain('Change Password');
     expect(container.textContent).toContain('Delete My Account');
   });

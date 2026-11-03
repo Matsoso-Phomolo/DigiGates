@@ -104,6 +104,8 @@ describe('authentication dialog accessibility',()=>{
     expect(dialog.getAttribute('aria-labelledby')).toBe('auth-dialog-title');
     expect(form.textContent).toContain('Full Name');
     expect(form.textContent).toContain('Account type');
+    expect(form.textContent).toContain('Date of Birth');
+    expect(form.querySelector('input[placeholder="YYYY-MM-DD"]')?.type).toBe('text');
     expect(form.textContent).toContain('Email Address');
     expect(form.textContent).toContain('Password');
     expect(form.textContent).toContain('Submit Registration');
@@ -119,6 +121,13 @@ describe('authentication dialog accessibility',()=>{
     expect(dialog.textContent).toContain('Sign In');
     expect(dialog.querySelector('input[type="email"]')).not.toBeNull();
     expect(dialog.querySelector('input[type="password"]')).not.toBeNull();
+  });
+
+  it('submits optional registration birth dates as unshifted ISO values and rejects impossible dates',async()=>{
+    global.fetch=vi.fn(()=>response({message:'Registration received'}));await renderAt('/signup');const form=container.querySelector('.authDialog form'),dateInput=form.querySelector('input[placeholder="YYYY-MM-DD"]');
+    const setValue=(input,value)=>act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));await Promise.resolve()});
+    await setValue(dateInput,'2026-02-30');await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(fetch).not.toHaveBeenCalled();expect(container.textContent).toContain('valid calendar date');
+    await setValue(dateInput,'1995-06-01');await setValue(form.querySelector('input[type="email"]'),'dated@example.com');await setValue(form.querySelector('input[type="password"]'),'Secure123!');await setValue(form.querySelector('input:not([type])'),'Dated User');await act(async()=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await Promise.resolve();await Promise.resolve()});const payload=JSON.parse(fetch.mock.calls[0][1].body);expect(payload.date_of_birth).toBe('1995-06-01');
   });
 
   it('closes on Escape and restores background scrolling',async()=>{

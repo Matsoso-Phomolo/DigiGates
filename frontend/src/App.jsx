@@ -5,6 +5,7 @@ import {api} from './api.js';
 import {ARITY,GATES,SYMBOL,evalGraph,evaluate,expressionFor,rows} from './logic.js';
 import {BinarySwitch,GateLED,GateSimulator,LogicExpression,LogicGate,TruthTable} from './components.jsx';
 import {AdminPortal,ProfileV2,SuperAdminPortal} from './AccountManagement.jsx';
+import AuthModalV2 from './AuthModalV2.jsx';
 
 const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const COLORS=['#1E90FF','#192BC2','#73C2FB','#0047AB'];
@@ -72,6 +73,6 @@ export default function App(){
   if(!sessionReady)return <main className="sessionLoading" role="status">Verifying your DigiGates account…</main>;
   const shell=content=><><WorkspaceHeader user={user} logout={logout} voice={voice} navigation={navigationFor(user)} theme={theme} onToggleTheme={toggleTheme} voiceListening={voiceListening} voiceFeedback={voiceFeedback}/>{content}</>;
   const learningGuard=(content,path)=>!user?<Navigate to={"/signin?next="+encodeURIComponent(path)} replace/>:!canUseLearning(user)?<Navigate to={destinationFor(user)} replace/>:shell(content);
-  const authPage=mode=><><PublicHeader theme={theme} onToggleTheme={toggleTheme}/><AuthModal mode={mode} setMode={()=>navigate(mode==="login"?"/signup":"/signin")} close={()=>navigate("/")} onAuth={authenticated}/></>;
+  const authPage=mode=><><PublicHeader theme={theme} onToggleTheme={toggleTheme}/><AuthModalV2 mode={mode} setMode={()=>navigate(mode==="login"?"/signup":"/signin")} close={()=>navigate("/")} onAuth={authenticated}/></>;
   return <Routes><Route path="/" element={<Home theme={theme} onToggleTheme={toggleTheme}/>}/><Route path="/about" element={<AboutPage theme={theme} onToggleTheme={toggleTheme}/>}/><Route path="/help" element={<HelpPage theme={theme} onToggleTheme={toggleTheme}/>}/><Route path="/signin" element={user?<Navigate to={destinationFor(user)} replace/>:authPage("login")}/><Route path="/signup" element={user?<Navigate to={destinationFor(user)} replace/>:authPage("register")}/><Route path="/learn" element={learningGuard(<Learn state={learn} setState={setLearn}/>,"/learn")}/><Route path="/explore" element={learningGuard(<Explore state={explore} setState={setExplore}/>,"/explore")}/><Route path="/build" element={learningGuard(<Build state={build} setState={setBuild}/>,"/build")}/><Route path="/profile" element={!user?<Navigate to="/signin?next=%2Fprofile" replace/>:shell(<ProfileV2 user={user} onUserChange={updateUser} logout={logout}/>)}/><Route path="/admin" element={!user?<Navigate to="/signin?next=%2Fadmin" replace/>:user.role==="ADMIN"&&authorized(user)?shell(<AdminPortal/>):<Navigate to={destinationFor(user)} replace/>}/><Route path="/super-admin" element={!user?<Navigate to="/signin?next=%2Fsuper-admin" replace/>:user.role==="SUPER_ADMIN"&&authorized(user)?shell(<SuperAdminPortal/>):<Navigate to={destinationFor(user)} replace/>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes>
 }

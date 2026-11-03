@@ -34,7 +34,7 @@ def register(data:Register,db:Session=Depends(get_db)):
     if db.scalar(select(User).where(User.email==email)): raise HTTPException(409,"Email already registered")
     role=UserRole.ADMIN if data.requested_role=="ADMIN" else UserRole.LEARNER
     approval=ApprovalStatus.PENDING if role==UserRole.ADMIN else ApprovalStatus.ACTIVE
-    user=User(full_name=data.full_name,email=email,password_hash=hash_password(data.password),role=role,approval_status=approval)
+    user=User(full_name=data.full_name,email=email,password_hash=hash_password(data.password),role=role,approval_status=approval,gender=data.gender,date_of_birth=data.date_of_birth)
     db.add(user); commit(db); db.refresh(user)
     if approval==ApprovalStatus.PENDING:
         return AdminRegistrationPending(message="Administrator access requires Super Admin approval.",user=user)

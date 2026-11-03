@@ -15,6 +15,12 @@ def test_public_registration_cannot_request_super_admin():
     with pytest.raises(ValidationError):
         Register(full_name="Unsafe",email="unsafe@example.com",password="Secure123!",requested_role="SUPER_ADMIN")
 
+def test_registration_accepts_iso_date_and_rejects_invalid_calendar_date():
+    value=Register(full_name="Dated User",email="dated@example.com",password="Secure123!",date_of_birth="1995-06-01")
+    assert value.date_of_birth.isoformat()=="1995-06-01"
+    with pytest.raises(ValidationError):
+        Register(full_name="Invalid Date",email="invalid-date@example.com",password="Secure123!",date_of_birth="2026-02-30")
+
 def test_gender_options_are_constrained():
     with pytest.raises(ValidationError):
         ManagedUserCreate(full_name="Learner",email="learner@example.com",password="Secure123!",gender="UNDOCUMENTED")
