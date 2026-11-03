@@ -1,5 +1,6 @@
 import React,{useEffect,useState} from "react";
 import {Shield,UserRound} from "lucide-react";
+import {Link} from "react-router-dom";
 import {api} from "./api.js";
 
 const genders=[['MALE','Male'],['FEMALE','Female'],['NON_BINARY','Non-binary'],['PREFER_NOT_TO_SAY','Prefer not to say']];
@@ -7,6 +8,7 @@ const empty={full_name:'',email:'',password:'',gender:'',date_of_birth:'',is_act
 const today=()=>new Date().toISOString().slice(0,10);
 
 export function ProfileV2({user,onUserChange,logout}){
+  const dashboard=user.is_active&&user.approval_status==='ACTIVE'?(user.role==='SUPER_ADMIN'?{label:'Super Admin Dashboard',to:'/super-admin',description:'Review administrator requests and manage authorized accounts.'}:user.role==='ADMIN'?{label:'Admin Dashboard',to:'/admin',description:'Manage DigiGates learner accounts.'}:null):null;
   const [form,setForm]=useState({full_name:user.full_name,email:user.email,gender:user.gender||'',date_of_birth:user.date_of_birth||''});
   const [deletion,setDeletion]=useState({current_password:'',confirmation:''});
   const [notice,setNotice]=useState(''); const [error,setError]=useState(''); const [busy,setBusy]=useState(false);
@@ -14,6 +16,7 @@ export function ProfileV2({user,onUserChange,logout}){
   async function remove(){if(deletion.confirmation!=='DELETE'){setError('Type DELETE exactly to confirm account deletion.');return}if(!confirm('Delete your own DigiGates account? Access will be revoked immediately.'))return;setBusy(true);setError('');try{await api('/profile',{method:'DELETE',body:JSON.stringify(deletion)});logout()}catch(e){setError(e.message);setBusy(false)}}
   return <main className="profilePage">
     <section className="profileHero panel"><div className="profileAvatar"><UserRound/></div><div><small>ACCOUNT · PROFILE</small><h1>{user.full_name}</h1><p>{user.email}</p><div className="profileMeta"><span>{user.role}</span><span>{user.approval_status}</span></div></div></section>
+    {dashboard&&<section className="panel roleDashboardCallout"><div><small>AUTHORIZED WORKSPACE</small><h2>{dashboard.label}</h2><p>{dashboard.description}</p></div><Link className="roleDashboardLink" to={dashboard.to}><Shield/> Open {dashboard.label}</Link></section>}
     {notice&&<div className="profileNotice successNotice" role="status">{notice}</div>}{error&&<div className="profileNotice error" role="alert">{error}</div>}
     <section className="profileGrid"><form className="panel profileCard" onSubmit={save}><h2>Personal Information</h2><p>Gender and date of birth are optional.</p><label>Full Name<input required minLength="2" maxLength="120" value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/></label><label>Email Address<input type="email" required value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label><label>Gender<select value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}><option value="">Not provided</option>{genders.map(([v,l])=><option value={v} key={v}>{l}</option>)}</select></label><label>Date of Birth <small>YYYY-MM-DD</small><input type="date" max={today()} value={form.date_of_birth} onChange={e=>setForm({...form,date_of_birth:e.target.value})}/></label><button className="primary" disabled={busy}>{busy?'Saving…':'Save Changes'}</button></form>
     <section className="panel profileCard profileReadout"><h2>Saved Profile</h2><dl><dt>Name</dt><dd>{user.full_name}</dd><dt>Email</dt><dd>{user.email}</dd><dt>Gender</dt><dd>{user.gender?.replaceAll('_',' ')||'Not provided'}</dd><dt>Date of Birth</dt><dd>{user.date_of_birth||'Not provided'}</dd></dl></section></section>
